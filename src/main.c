@@ -24,13 +24,13 @@ int main(int argc, char *argv[])
       break;
     }
 
-    else if (strcmp(command, "echo") == 0)
+    else if (strncmp(command, "echo ", 5) == 0)
     {
       printf("%s\n", command + 5);
     }
     else 
     {
-      // Prints the "<command>: command not found" message
+    // Prints the "<command>: command not found" message
     printf("%s: command not found\n", command);
     }
     
