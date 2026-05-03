@@ -21,9 +21,17 @@ int main(int argc, char *argv[]) {
     {
       break;
     }
-    
-    // Prints the "<command>: command not found" message
+
+    else if (strcmp(command, "echo") == 0)
+    {
+      printf("%s\n", command + 5);
+    }
+    else 
+    {
+      // Prints the "<command>: command not found" message
     printf("%s: command not found\n", command);
+    }
+    
   }
 
   return 0;
