@@ -2,12 +2,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
   // Flush after every printf
   setbuf(stdout, NULL);
 
   // TODO: Uncomment the code below to pass the first stage
-  while(1) {
+  while(1) 
+  {
    printf("$ ");
 
    //Captures User's command in Command Variable;
@@ -22,7 +24,7 @@ int main(int argc, char *argv[]) {
       break;
     }
 
-    else if (strcmp(command, "echo", 5) == 0)
+    else if (strcmp(command, "echo") == 0)
     {
       printf("%s\n", command + 5);
     }
