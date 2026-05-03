@@ -7,17 +7,19 @@ int main(int argc, char *argv[]) {
   setbuf(stdout, NULL);
 
   // TODO: Uncomment the code below to pass the first stage
+  while(1) {
    printf("$ ");
 
    //Captures User's command in Command Variable;
-  char command[1024];
-  fgets(command, sizeof(command), stdin);
+    char command[1024];
+    fgets(command, sizeof(command), stdin);
   
-  //Remove Trailing Newline
-  command[strcspn(command, "\n")] = '\0';
+    //Remove Trailing Newline
+    command[strcspn(command, "\n")] = '\0';
 
-  // Prints the "<command>: command not found" message
-  printf("%s: command not found\n", command);
+    // Prints the "<command>: command not found" message
+    printf("%s: command not found\n", command);
+  }
 
   return 0;
 }
