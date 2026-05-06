@@ -33,7 +33,7 @@ int main(int argc, char *argv[])
       break;
     }
 
-    else if (strncmp(builtin, "echo", 4) == 0)
+    else if (strncmp(builtin, "echo", 5) == 0)
     {
       printf("%s\n", arg);
     }
