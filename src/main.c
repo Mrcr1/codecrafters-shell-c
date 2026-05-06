@@ -35,7 +35,21 @@ int main(int argc, char *argv[])
 
     else if (strncmp(builtin, "echo", 5) == 0)
     {
-      printf("%s\n", arg);
+      if (arg != NULL) 
+      {
+        printf("%s\n", arg);
+        char *next_arg = strtok(NULL, " ");
+        while (next_arg != NULL)
+        {
+          printf(" %s", next_arg);
+          next_arg = strtok(NULL, " ");
+      }
+      printf("\n");
+      }
+      else
+      {
+        printf("\n");
+      }
     }
     else if (strcmp(builtin, "type") == 0)
     {
