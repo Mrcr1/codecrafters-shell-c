@@ -19,19 +19,39 @@ int main(int argc, char *argv[])
     //Remove Trailing Newline
     command[strcspn(command, "\n")] = '\0';
 
-    if (strcmp(command, "exit") ==0)
+    char *builtin = strtok(command, " ");
+    char *arg = strtok(NULL, " ");
+    if (builtin == NULL) 
+    {
+      continue; 
+    }
+
+
+
+    if (strcmp(builtin, "exit") ==0)
     {
       break;
     }
 
-    else if (strncmp(command, "echo ", 5) == 0)
+    else if (strncmp(builtin, "echo", 4) == 0)
     {
-      printf("%s\n", command + 5);
+      printf("%s\n", arg);
+    }
+    else if (strcmp(builtin, "type") == 0)
+    {
+      if (!strcmp(arg, "exit") || !strcmp(arg, "echo") || !strcmp(arg, "type"))
+      {
+        printf("%s is a shell builtin\n", arg);
+      }
+      else
+      {
+        printf("%s: not found\n", arg);
+      }
     }
     else 
     {
     // Prints the "<command>: command not found" message
-    printf("%s: command not found\n", command);
+    printf("%s: command not found\n", builtin);
     }
     
   }
