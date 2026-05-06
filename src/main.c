@@ -4,68 +4,59 @@
 
 int main(int argc, char *argv[])
 {
-  // Flush after every printf
-  setbuf(stdout, NULL);
+    setbuf(stdout, NULL);
 
-  // TODO: Uncomment the code below to pass the first stage
-  while(1) 
-  {
-   printf("$ ");
-
-   //Captures User's command in Command Variable;
-    char command[1024];
-    fgets(command, sizeof(command), stdin);
-  
-    //Remove Trailing Newline
-    command[strcspn(command, "\n")] = '\0';
-
-    char *builtin = strtok(command, " ");
-    char *arg = strtok(NULL, " ");
-    if (builtin == NULL) 
+    while (1)
     {
-      continue; 
-    }
+        printf("$ ");
 
+        char command[1024];
+        fgets(command, sizeof(command), stdin);
+        command[strcspn(command, "\n")] = '\0';
 
+        // Split on the first space only
+        char *space = strchr(command, ' ');
+        char *builtin = command;
+        char *arg = NULL;
 
-    if (strcmp(builtin, "exit") ==0)
-    {
-      break;
-    }
-
-    else if (strncmp(builtin, "echo", 5) == 0)
-    {
-      if (arg != NULL) 
-      {
-        printf("%s\n", arg);
-        char *next_arg = strtok(NULL, " ");
-        while (next_arg != NULL)
+        if (space != NULL)
         {
-          printf(" %s", next_arg);
-          next_arg = strtok(NULL, " ");
-      }
-      printf("\n");
-      }
-    }
-    else if (strcmp(builtin, "type") == 0)
-    {
-      if (!strcmp(arg, "exit") || !strcmp(arg, "echo") || !strcmp(arg, "type"))
-      {
-        printf("%s is a shell builtin\n", arg);
-      }
-      else
-      {
-        printf("%s: not found\n", arg);
-      }
-    }
-    else 
-    {
-    // Prints the "<command>: command not found" message
-    printf("%s: command not found\n", builtin);
-    }
-    
-  }
+            *space = '\0';   // terminate builtin name
+            arg = space + 1; // arg = everything after the first space
+        }
 
-  return 0;
+        // Skip empty input
+        if (*builtin == '\0')
+            continue;
 
+        if (strcmp(builtin, "exit") == 0)
+        {
+            break;
+        }
+        else if (strcmp(builtin, "echo") == 0)
+        {
+            printf("%s\n", arg ? arg : "");
+        }
+        else if (strcmp(builtin, "type") == 0)
+        {
+            if (arg == NULL)
+            {
+                printf("type: missing argument\n");
+            }
+            else if (!strcmp(arg, "exit") || !strcmp(arg, "echo") || !strcmp(arg, "type"))
+            {
+                printf("%s is a shell builtin\n", arg);
+            }
+            else
+            {
+                printf("%s: not found\n", arg);
+            }
+        }
+        else
+        {
+            printf("%s: command not found\n", builtin);
+        }
+    }
+
+    return 0;
 }
