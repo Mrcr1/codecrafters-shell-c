@@ -82,6 +82,19 @@ int main(int argc, char *argv[])
             }
         }
 
+        // cd builtin:
+        else if (strcmp(builtin, "cd") == 0)
+        {
+            if (arg == NULL)
+            {
+            printf("cd: missing argument\n");
+            }
+            else if (chdir(arg) != 0)
+            {
+            printf("cd: %s: No such file or directory\n", arg);
+            }
+        }
+
         // type builtin:
         else if (strcmp(builtin, "type") == 0)
         {
@@ -89,7 +102,7 @@ int main(int argc, char *argv[])
             {
                 printf("type: missing argument\n");
             }
-            else if (!strcmp(arg, "exit") || !strcmp(arg, "echo") || !strcmp(arg, "type") || !strcmp(arg, "pwd"))
+            else if (!strcmp(arg, "exit") || !strcmp(arg, "echo") || !strcmp(arg, "type") || !strcmp(arg, "pwd") || !strcmp(arg, "cd"))
             {
                 printf("%s is a shell builtin\n", arg);
             }
