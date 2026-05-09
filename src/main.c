@@ -2,6 +2,35 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/wait.h>
+#include <sys/types.h>
+
+// Searches PATH for a command, returns full path or NULL
+char *find_in_path(const char *cmd)
+{
+    char *path_env = getenv("PATH");
+    if (path_env == NULL) return NULL;
+
+    char *path_copy = strdup(path_env);
+    char *dir = strtok(path_copy, ":");
+
+    while (dir != NULL)
+    {
+        char full_path[1024];
+        snprintf(full_path, sizeof(full_path), "%s/%s", dir, cmd);
+
+        if (access(full_path, X_OK) == 0)
+        {
+            free(path_copy);
+            return strdup(full_path); // caller must free
+        }
+
+        dir = strtok(NULL, ":");
+    }
+
+    free(path_copy);
+    return NULL;
+}
 
 int main(int argc, char *argv[])
 {
@@ -11,40 +40,31 @@ int main(int argc, char *argv[])
     {
         printf("$ ");
 
-        // Read the entire command line input
         char command[1024];
         fgets(command, sizeof(command), stdin);
         command[strcspn(command, "\n")] = '\0';
 
-        // Split on the first space only to separate the builtin command from its argument
         char *space = strchr(command, ' ');
         char *builtin = command;
         char *arg = NULL;
 
-        // If there is a space, terminate the builtin command and set arg to the rest of the string
         if (space != NULL)
         {
-            *space = '\0';   // terminate builtin name
-            arg = space + 1; // arg = everything after the first space
+            *space = '\0';
+            arg = space + 1;
         }
 
-        // Builtin Block Starts
         if (*builtin == '\0')
             continue;
 
-        // Exit builtin:
         if (strcmp(builtin, "exit") == 0)
         {
             break;
         }
-
-        // Echo builtin:
         else if (strcmp(builtin, "echo") == 0)
         {
             printf("%s\n", arg ? arg : "");
         }
-        
-        // type builtin:
         else if (strcmp(builtin, "type") == 0)
         {
             if (arg == NULL)
@@ -55,48 +75,72 @@ int main(int argc, char *argv[])
             {
                 printf("%s is a shell builtin\n", arg);
             }
-                        
-            // type executables:
             else
             {
-                char *path_env = getenv("PATH");
-                int found = 0;
-                
-                if (path_env != NULL)
+                char *full_path = find_in_path(arg);
+                if (full_path != NULL)
                 {
-                    //Duplicate the PATH environment variable to avoid modifying the original
-                    char *path_copy = strdup(path_env);
-                    char *dir = strtok(path_copy, ":");
-
-                    while (dir != NULL)
-                    {
-                        char full_path[1024];
-                        snprintf(full_path, sizeof(full_path), "%s/%s", dir, arg);
-
-                        if (access(full_path, X_OK) == 0)
-                        {
-                            printf("%s is %s\n", arg, full_path);
-                            found = 1;
-                            break;
-                        }
-
-                        dir = strtok(NULL, ":");
-                    }
-
-                    free(path_copy);
-                    
+                    printf("%s is %s\n", arg, full_path);
+                    free(full_path);
                 }
-
-                if (!found)
+                else
                 {
-                    printf("%s not found\n", arg);
+                    printf("%s: not found\n", arg);
                 }
-                
             }
         }
         else
         {
-            printf("%s: command not found\n", builtin);
+            // Not a builtin — search PATH and execute
+            char *full_path = find_in_path(builtin);
+
+            if (full_path == NULL)
+            {
+                printf("%s: command not found\n", builtin);
+            }
+            else
+            {
+                // Build argv array: [builtin, arg1, arg2, ..., NULL]
+                char *exec_args[1024];
+                exec_args[0] = builtin;
+
+                int i = 1;
+                if (arg != NULL)
+                {
+                    // Split remaining args by space
+                    char *token = strtok(arg, " ");
+                    while (token != NULL && i < 1023)
+                    {
+                        exec_args[i++] = token;
+                        token = strtok(NULL, " ");
+                    }
+                }
+                exec_args[i] = NULL; // must be NULL terminated
+
+                // Fork and exec
+                pid_t pid = fork();
+
+                if (pid == 0)
+                {
+                    // Child process — replace with the external program
+                    execv(full_path, exec_args);
+
+                    // If execv returns, something went wrong
+                    perror("execv");
+                    exit(1);
+                }
+                else if (pid > 0)
+                {
+                    // Parent process — wait for child to finish
+                    waitpid(pid, NULL, 0);
+                }
+                else
+                {
+                    perror("fork");
+                }
+
+                free(full_path);
+            }
         }
     }
 
