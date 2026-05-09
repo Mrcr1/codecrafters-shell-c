@@ -89,7 +89,21 @@ int main(int argc, char *argv[])
             {
             printf("cd: missing argument\n");
             }
-            else if (chdir(arg) != 0)
+            else 
+            {
+                // Handle ~ for home directory:
+                if (strcmp(arg, "~") == 0)
+                {
+                    arg = getenv("HOME");
+                    if (arg == NULL)
+                    {
+                        printf("cd: HOME not set\n");
+                        continue;
+                    }
+                }
+            }     
+                        
+            if (chdir(arg) != 0)
             {
             printf("cd: %s: No such file or directory\n", arg);
             }
