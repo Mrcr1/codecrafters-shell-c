@@ -5,7 +5,6 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 
-// Searches PATH for a command, returns full path or NULL
 char *find_in_path(const char *cmd)
 {
     char *path_env = getenv("PATH");
@@ -22,7 +21,7 @@ char *find_in_path(const char *cmd)
         if (access(full_path, X_OK) == 0)
         {
             free(path_copy);
-            return strdup(full_path); // caller must free
+            return strdup(full_path);
         }
 
         dir = strtok(NULL, ":");
@@ -57,21 +56,40 @@ int main(int argc, char *argv[])
         if (*builtin == '\0')
             continue;
 
+        // Exit builtin:
         if (strcmp(builtin, "exit") == 0)
         {
             break;
         }
+
+        // Echo builtin:
         else if (strcmp(builtin, "echo") == 0)
         {
             printf("%s\n", arg ? arg : "");
         }
+
+        // pwd builtin:
+        else if (strcmp(builtin, "pwd") == 0)
+        {
+            char cwd[1024];
+            if (getcwd(cwd, sizeof(cwd)) != NULL)
+            {
+                printf("%s\n", cwd);
+            }
+            else
+            {
+                perror("pwd");
+            }
+        }
+
+        // type builtin:
         else if (strcmp(builtin, "type") == 0)
         {
             if (arg == NULL)
             {
                 printf("type: missing argument\n");
             }
-            else if (!strcmp(arg, "exit") || !strcmp(arg, "echo") || !strcmp(arg, "type"))
+            else if (!strcmp(arg, "exit") || !strcmp(arg, "echo") || !strcmp(arg, "type") || !strcmp(arg, "pwd"))
             {
                 printf("%s is a shell builtin\n", arg);
             }
@@ -91,7 +109,7 @@ int main(int argc, char *argv[])
         }
         else
         {
-            // Not a builtin — search PATH and execute
+            // External program execution:
             char *full_path = find_in_path(builtin);
 
             if (full_path == NULL)
@@ -100,14 +118,12 @@ int main(int argc, char *argv[])
             }
             else
             {
-                // Build argv array: [builtin, arg1, arg2, ..., NULL]
                 char *exec_args[1024];
                 exec_args[0] = builtin;
 
                 int i = 1;
                 if (arg != NULL)
                 {
-                    // Split remaining args by space
                     char *token = strtok(arg, " ");
                     while (token != NULL && i < 1023)
                     {
@@ -115,23 +131,18 @@ int main(int argc, char *argv[])
                         token = strtok(NULL, " ");
                     }
                 }
-                exec_args[i] = NULL; // must be NULL terminated
+                exec_args[i] = NULL;
 
-                // Fork and exec
                 pid_t pid = fork();
 
                 if (pid == 0)
                 {
-                    // Child process — replace with the external program
                     execv(full_path, exec_args);
-
-                    // If execv returns, something went wrong
                     perror("execv");
                     exit(1);
                 }
                 else if (pid > 0)
                 {
-                    // Parent process — wait for child to finish
                     waitpid(pid, NULL, 0);
                 }
                 else
