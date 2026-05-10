@@ -59,6 +59,18 @@ int parse_args(char *input, char **args, int max_args)
                 }
                 if (*p == '\'') p++; // skip closing '
             }
+
+            else if (*p == '"')
+            {
+                // Inside double quotes — copy literally
+                p++; // skip opening "
+                while (*p != '\0' && *p != '"')
+                {
+                    buf[buf_len++] = *p++;
+                }
+                if (*p == '"') p++; // skip closing "
+            }
+
             else if (*p == ' ' || *p == '\t')
             {
                 // Unquoted space = end of argument
