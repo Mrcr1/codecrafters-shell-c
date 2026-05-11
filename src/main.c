@@ -71,6 +71,16 @@ int parse_args(char *input, char **args, int max_args)
                 if (*p == '"') p++; // skip closing "
             }
 
+            else if (*p == '\\')
+            {
+                // Backlash Outside Options - escape next character
+                p++; // skip opening "
+                if (*p != '\0')
+                {
+                    buf[buf_len++] = *p++; // Take the next character literally
+                }
+            }
+
             else if (*p == ' ' || *p == '\t')
             {
                 // Unquoted space = end of argument
