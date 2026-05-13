@@ -99,28 +99,29 @@ void free_args(char **args, int argc)
         free(args[i]);
 }
 
-// Scans args for > or 1>, removes them, returns output file or NULL
-char *extract_redirect(char **args, int *nargs)
+char *extract_redirect(char **args, int *nargs, int *is_stderr)
 {
     for (int i = 0; i < *nargs; i++)
     {
         if (strcmp(args[i], ">") == 0 || strcmp(args[i], "1>") == 0)
+            *is_stderr = 0;
+        else if (strcmp(args[i], "2>") == 0)
+            *is_stderr = 1;
+        else
+            continue;
+
+        if (i + 1 < *nargs)
         {
-            if (i + 1 < *nargs)
-            {
-                char *file = args[i + 1];
+            char *file = args[i + 1];
 
-                // Remove the > and filename from args
-                free(args[i]);
-                // shift remaining args left
-                for (int j = i; j < *nargs - 2; j++)
-                    args[j] = args[j + 2];
+            free(args[i]);
+            for (int j = i; j < *nargs - 2; j++)
+                args[j] = args[j + 2];
 
-                *nargs -= 2;
-                args[*nargs] = NULL;
+            *nargs -= 2;
+            args[*nargs] = NULL;
 
-                return file; // caller must free
-            }
+            return file;
         }
     }
     return NULL;
@@ -145,14 +146,17 @@ int main(int argc, char *argv[])
 
         char *builtin = args[0];
 
-        // Check for output redirection
-        char *outfile = extract_redirect(args, &nargs);
+        // Check for redirection
+        int is_stderr = 0;
+        char *outfile = extract_redirect(args, &nargs, &is_stderr);
 
-        // Save stdout and redirect if needed
-        int saved_stdout = -1;
+        // Save and redirect the right fd
+        int saved_fd = -1;
+        int target_fd = is_stderr ? STDERR_FILENO : STDOUT_FILENO;
+
         if (outfile != NULL)
         {
-            saved_stdout = dup(STDOUT_FILENO);
+            saved_fd = dup(target_fd);
             int fd = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
             if (fd < 0)
             {
@@ -161,14 +165,14 @@ int main(int argc, char *argv[])
                 free_args(args, nargs);
                 continue;
             }
-            dup2(fd, STDOUT_FILENO);
+            dup2(fd, target_fd);
             close(fd);
         }
 
         // Exit builtin:
         if (strcmp(builtin, "exit") == 0)
         {
-            if (outfile) { dup2(saved_stdout, STDOUT_FILENO); close(saved_stdout); free(outfile); }
+            if (outfile) { dup2(saved_fd, target_fd); close(saved_fd); free(outfile); }
             free_args(args, nargs);
             break;
         }
@@ -210,7 +214,7 @@ int main(int argc, char *argv[])
                     if (path == NULL)
                     {
                         printf("cd: HOME not set\n");
-                        if (outfile) { dup2(saved_stdout, STDOUT_FILENO); close(saved_stdout); free(outfile); }
+                        if (outfile) { dup2(saved_fd, target_fd); close(saved_fd); free(outfile); }
                         free_args(args, nargs);
                         continue;
                     }
@@ -284,12 +288,12 @@ int main(int argc, char *argv[])
             }
         }
 
-        // Restore stdout
+        // Restore fd
         if (outfile != NULL)
         {
             fflush(stdout);
-            dup2(saved_stdout, STDOUT_FILENO);
-            close(saved_stdout);
+            dup2(saved_fd, target_fd);
+            close(saved_fd);
             free(outfile);
         }
 
