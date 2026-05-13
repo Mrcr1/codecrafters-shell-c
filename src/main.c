@@ -99,14 +99,30 @@ void free_args(char **args, int argc)
         free(args[i]);
 }
 
-char *extract_redirect(char **args, int *nargs, int *is_stderr)
+char *extract_redirect(char **args, int *nargs, int *is_stderr, int *is_append)
 {
     for (int i = 0; i < *nargs; i++)
     {
         if (strcmp(args[i], ">") == 0 || strcmp(args[i], "1>") == 0)
+        {
             *is_stderr = 0;
+            *is_append = 0;
+        } 
         else if (strcmp(args[i], "2>") == 0)
+        {
             *is_stderr = 1;
+            *is_append = 0;
+        }
+        else if (strcmp(args[i], ">>") == 0 || strcmp(args[i], "1>>") == 0)
+        {
+            *is_stderr = 0;
+            *is_append = 1;
+        }
+        else if (strcmp(args[i], "2>>") == 0)
+        {
+            *is_stderr = 1;
+            *is_append = 1;
+        }
         else
             continue;
 
@@ -148,7 +164,8 @@ int main(int argc, char *argv[])
 
         // Check for redirection
         int is_stderr = 0;
-        char *outfile = extract_redirect(args, &nargs, &is_stderr);
+        int is_append = 0;
+        char *outfile = extract_redirect(args, &nargs, &is_stderr, &is_append);
 
         // Save and redirect the right fd
         int saved_fd = -1;
@@ -157,7 +174,8 @@ int main(int argc, char *argv[])
         if (outfile != NULL)
         {
             saved_fd = dup(target_fd);
-            int fd = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            int flags = O_WRONLY | O_CREAT | (is_append ? O_APPEND : O_TRUNC);
+            int fd = open(outfile, flags, 0644);
             if (fd < 0)
             {
                 perror("open");
