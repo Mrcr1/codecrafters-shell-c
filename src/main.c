@@ -109,7 +109,7 @@ char *extract_redirect(char **args, int *nargs, int *is_stderr, int *is_append)
         {
             *is_stderr = 0;
             *is_append = 0;
-        } 
+        }
         else if (strcmp(args[i], "2>") == 0)
         {
             *is_stderr = 1;
@@ -120,33 +120,25 @@ char *extract_redirect(char **args, int *nargs, int *is_stderr, int *is_append)
             *is_stderr = 0;
             *is_append = 1;
         }
-        else if (strcmp(args[i], "2>>") == 0)
-        {
-            *is_stderr = 1;
-            *is_append = 1;
-        }
         else
             continue;
 
         if (i + 1 < *nargs)
         {
             char *file = args[i + 1];
-
             free(args[i]);
             for (int j = i; j < *nargs - 2; j++)
                 args[j] = args[j + 2];
-
             *nargs -= 2;
             args[*nargs] = NULL;
-
             return file;
         }
     }
     return NULL;
 }
 
-// Builtins for TAB completions
-char *builtin_list[] = {"exit", "echo", "type", "pwd", "cd", NULL};
+// Builtins list for tab completion
+char *builtin_list[] = { "echo", "exit", "type", "pwd", "cd", NULL };
 
 char *builtin_generator(const char *text, int state)
 {
@@ -165,14 +157,15 @@ char *builtin_generator(const char *text, int state)
         if (strncmp(name, text, len) == 0)
             return strdup(name);
     }
+
     return NULL;
 }
 
 char **shell_completion(const char *text, int start, int end)
 {
     (void)end;
-    rl_attempted_completion_over = 1;
-    if (start ==0)
+    rl_attempted_completion_over = 1;  // disable default filename completion
+    if (start == 0)
         return rl_completion_matches(text, builtin_generator);
     return NULL;
 }
@@ -181,22 +174,20 @@ int main(int argc, char *argv[])
 {
     setbuf(stdout, NULL);
 
-    // Set up tab Completion
+    // Set up tab completion
     rl_attempted_completion_function = shell_completion;
 
     while (1)
     {
-        printf("$ ");
+        char *command = readline("$ ");
+        if (command == NULL) break;  // Ctrl+D
 
-        char *command = readline("$");
-        if (command == NULL) break;
-
-        if (command[0] != '\0')
+        // Skip empty input
+        if (command[0] == '\0')
         {
             free(command);
             continue;
         }
-        
 
         char *args[1024];
         int nargs = parse_args(command, args, 1024);
