@@ -66,7 +66,15 @@ int parse_args(char *input, char **args, int max_args)
                 p++; // skip opening "
                 while (*p != '\0' && *p != '"')
                 {
-                    buf[buf_len++] = *p++;
+                    if (*p == '\\' && (*(p + 1) == '"' || *(p + 1) == '\\'))
+                    {
+                        p++; // skip backslash, take next char literally
+                        buf[buf_len++] = *p++;
+                    }
+                    else
+                    {
+                        buf[buf_len++] = *p++;
+                    }
                 }
                 if (*p == '"') p++; // skip closing "
             }
