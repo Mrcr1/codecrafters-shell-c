@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/types.h>
+#include <fcntl.h>
 
 char *find_in_path(const char *cmd)
 {
@@ -31,7 +32,6 @@ char *find_in_path(const char *cmd)
     return NULL;
 }
 
-// Parses input into args array, handling single quotes
 int parse_args(char *input, char **args, int max_args)
 {
     int argc = 0;
@@ -40,58 +40,43 @@ int parse_args(char *input, char **args, int max_args)
 
     while (*p != '\0' && argc < max_args - 1)
     {
-        // Skip spaces between arguments
         while (*p == ' ' || *p == '\t') p++;
         if (*p == '\0') break;
 
         int buf_len = 0;
 
-        // Build one argument
         while (*p != '\0')
         {
             if (*p == '\'')
             {
-                // Inside single quotes — copy literally
-                p++; // skip opening '
+                p++;
                 while (*p != '\0' && *p != '\'')
-                {
                     buf[buf_len++] = *p++;
-                }
-                if (*p == '\'') p++; // skip closing '
+                if (*p == '\'') p++;
             }
-
             else if (*p == '"')
             {
-                // Inside double quotes — copy literally
-                p++; // skip opening "
+                p++;
                 while (*p != '\0' && *p != '"')
                 {
-                    if (*p == '\\' && (*(p + 1) == '"' || *(p + 1) == '\\'))
+                    if (*p == '\\' && (*(p+1) == '"' || *(p+1) == '\\'))
                     {
-                        p++; // skip backslash, take next char literally
+                        p++;
                         buf[buf_len++] = *p++;
                     }
                     else
-                    {
                         buf[buf_len++] = *p++;
-                    }
                 }
-                if (*p == '"') p++; // skip closing "
+                if (*p == '"') p++;
             }
-
             else if (*p == '\\')
             {
-                // Backlash Outside Options - escape next character
-                p++; // skip opening "
+                p++;
                 if (*p != '\0')
-                {
-                    buf[buf_len++] = *p++; // Take the next character literally
-                }
+                    buf[buf_len++] = *p++;
             }
-
             else if (*p == ' ' || *p == '\t')
             {
-                // Unquoted space = end of argument
                 break;
             }
             else
@@ -114,6 +99,33 @@ void free_args(char **args, int argc)
         free(args[i]);
 }
 
+// Scans args for > or 1>, removes them, returns output file or NULL
+char *extract_redirect(char **args, int *nargs)
+{
+    for (int i = 0; i < *nargs; i++)
+    {
+        if (strcmp(args[i], ">") == 0 || strcmp(args[i], "1>") == 0)
+        {
+            if (i + 1 < *nargs)
+            {
+                char *file = args[i + 1];
+
+                // Remove the > and filename from args
+                free(args[i]);
+                // shift remaining args left
+                for (int j = i; j < *nargs - 2; j++)
+                    args[j] = args[j + 2];
+
+                *nargs -= 2;
+                args[*nargs] = NULL;
+
+                return file; // caller must free
+            }
+        }
+    }
+    return NULL;
+}
+
 int main(int argc, char *argv[])
 {
     setbuf(stdout, NULL);
@@ -126,7 +138,6 @@ int main(int argc, char *argv[])
         fgets(command, sizeof(command), stdin);
         command[strcspn(command, "\n")] = '\0';
 
-        // Parse into args array
         char *args[1024];
         int nargs = parse_args(command, args, 1024);
 
@@ -134,9 +145,30 @@ int main(int argc, char *argv[])
 
         char *builtin = args[0];
 
+        // Check for output redirection
+        char *outfile = extract_redirect(args, &nargs);
+
+        // Save stdout and redirect if needed
+        int saved_stdout = -1;
+        if (outfile != NULL)
+        {
+            saved_stdout = dup(STDOUT_FILENO);
+            int fd = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (fd < 0)
+            {
+                perror("open");
+                free(outfile);
+                free_args(args, nargs);
+                continue;
+            }
+            dup2(fd, STDOUT_FILENO);
+            close(fd);
+        }
+
         // Exit builtin:
         if (strcmp(builtin, "exit") == 0)
         {
+            if (outfile) { dup2(saved_stdout, STDOUT_FILENO); close(saved_stdout); free(outfile); }
             free_args(args, nargs);
             break;
         }
@@ -178,6 +210,7 @@ int main(int argc, char *argv[])
                     if (path == NULL)
                     {
                         printf("cd: HOME not set\n");
+                        if (outfile) { dup2(saved_stdout, STDOUT_FILENO); close(saved_stdout); free(outfile); }
                         free_args(args, nargs);
                         continue;
                     }
@@ -249,6 +282,15 @@ int main(int argc, char *argv[])
 
                 free(full_path);
             }
+        }
+
+        // Restore stdout
+        if (outfile != NULL)
+        {
+            fflush(stdout);
+            dup2(saved_stdout, STDOUT_FILENO);
+            close(saved_stdout);
+            free(outfile);
         }
 
         free_args(args, nargs);
