@@ -105,20 +105,25 @@ char *extract_redirect(char **args, int *nargs, int *is_stderr, int *is_append)
 {
     for (int i = 0; i < *nargs; i++)
     {
-        if (strcmp(args[i], ">") == 0 || strcmp(args[i], "1>") == 0)
+        if (strcmp(args[i], "2>>") == 0 )
         {
-            *is_stderr = 0;
-            *is_append = 0;
+            *is_stderr = 1;
+            *is_append = 1;
         }
         else if (strcmp(args[i], "2>") == 0)
         {
             *is_stderr = 1;
             *is_append = 0;
         }
-        else if (strcmp(args[i], ">>") == 0 || strcmp(args[i], "1>>") == 0)
+        else if (strcmp(args[i], "1>>") == 0 || strcmp(args[i], ">>") == 0)
         {
             *is_stderr = 0;
             *is_append = 1;
+        }
+        else if (strcmp(args[i], "1>") == 0 || strcmp(args[i], ">") == 0)
+        {
+            *is_stderr = 0;
+            *is_append = 0;
         }
         else
             continue;
