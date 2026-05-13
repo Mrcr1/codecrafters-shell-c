@@ -5,6 +5,8 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <fcntl.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 
 char *find_in_path(const char *cmd)
 {
@@ -143,20 +145,62 @@ char *extract_redirect(char **args, int *nargs, int *is_stderr, int *is_append)
     return NULL;
 }
 
+// Builtins for TAB completions
+char *builtin_list[] = {"exit", "echo", "type", "pwd", "cd", NULL};
+
+char *builtin_generator(const char *text, int state)
+{
+    static int index;
+    static int len;
+
+    if (state == 0)
+    {
+        index = 0;
+        len = strlen(text);
+    }
+
+    while (builtin_list[index] != NULL)
+    {
+        char *name = builtin_list[index++];
+        if (strncmp(name, text, len) == 0)
+            return strdup(name);
+    }
+    return NULL;
+}
+
+char **shell_completion(const char *text, int start, int end)
+{
+    (void)end;
+    rl_attempted_completion_over = 1;
+    if (start ==0)
+        return rl_completion_matches(text, builtin_generator);
+    return NULL;
+}
+
 int main(int argc, char *argv[])
 {
     setbuf(stdout, NULL);
+
+    // Set up tab Completion
+    rl_attempted_completion_function = shell_completion;
 
     while (1)
     {
         printf("$ ");
 
-        char command[1024];
-        fgets(command, sizeof(command), stdin);
-        command[strcspn(command, "\n")] = '\0';
+        char *command = readline("$");
+        if (command == NULL) break;
+
+        if (command[0] != '\0')
+        {
+            free(command);
+            continue;
+        }
+        
 
         char *args[1024];
         int nargs = parse_args(command, args, 1024);
+        free(command);
 
         if (nargs == 0) continue;
 
