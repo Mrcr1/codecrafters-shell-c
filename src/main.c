@@ -5,6 +5,7 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <fcntl.h>
+#include <dirent.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 
@@ -105,7 +106,7 @@ char *extract_redirect(char **args, int *nargs, int *is_stderr, int *is_append)
 {
     for (int i = 0; i < *nargs; i++)
     {
-        if (strcmp(args[i], "2>>") == 0 )
+        if (strcmp(args[i], "2>>") == 0)
         {
             *is_stderr = 1;
             *is_append = 1;
@@ -142,8 +143,10 @@ char *extract_redirect(char **args, int *nargs, int *is_stderr, int *is_append)
     return NULL;
 }
 
-// Builtins list for tab completion
-char *builtin_list[] = { "echo", "exit", "type", "pwd", "cd", NULL };
+// Builtins for TAB completion
+char *builtin_list[] = {"echo", "exit", "type", "pwd", "cd", NULL};
+char **matches = NULL;
+int match_count = 0;
 
 char *builtin_generator(const char *text, int state)
 {
@@ -154,14 +157,74 @@ char *builtin_generator(const char *text, int state)
     {
         index = 0;
         len = strlen(text);
+        match_count = 0;
+
+        if (matches != NULL)
+        {
+            for (int i = 0; matches[i] != NULL; i++)
+                free(matches[i]);
+            free(matches);
+            matches = NULL;
+        }
+
+        matches = malloc(sizeof(char *) * 1024);
+        matches[0] = NULL;
+
+        // Add matching builtins
+        for (int i = 0; builtin_list[i] != NULL; i++)
+        {
+            if (strncmp(builtin_list[i], text, len) == 0)
+                matches[match_count++] = strdup(builtin_list[i]);
+        }
+
+        // Search PATH for matching executables
+        char *path_env = getenv("PATH");
+        if (path_env != NULL)
+        {
+            char *path_copy = strdup(path_env);
+            char *dir = strtok(path_copy, ":");
+
+            while (dir != NULL)
+            {
+                DIR *dp = opendir(dir);
+                if (dp != NULL)
+                {
+                    struct dirent *entry;
+                    while ((entry = readdir(dp)) != NULL)
+                    {
+                        if (strncmp(entry->d_name, text, len) == 0)
+                        {
+                            char full_path[1024];
+                            snprintf(full_path, sizeof(full_path), "%s/%s", dir, entry->d_name);
+                            if (access(full_path, X_OK) == 0)
+                            {
+                                // Deduplicate
+                                int dup = 0;
+                                for (int i = 0; i < match_count; i++)
+                                {
+                                    if (strcmp(matches[i], entry->d_name) == 0)
+                                    {
+                                        dup = 1;
+                                        break;
+                                    }
+                                }
+                                if (!dup && match_count < 1023)
+                                    matches[match_count++] = strdup(entry->d_name);
+                            }
+                        }
+                    }
+                    closedir(dp);
+                }
+                dir = strtok(NULL, ":");
+            }
+            free(path_copy);
+        }
+
+        matches[match_count] = NULL;
     }
 
-    while (builtin_list[index] != NULL)
-    {
-        char *name = builtin_list[index++];
-        if (strncmp(name, text, len) == 0)
-            return strdup(name);
-    }
+    if (index < match_count)
+        return strdup(matches[index++]);
 
     return NULL;
 }
@@ -169,7 +232,7 @@ char *builtin_generator(const char *text, int state)
 char **shell_completion(const char *text, int start, int end)
 {
     (void)end;
-    rl_attempted_completion_over = 1;  // disable default filename completion
+    rl_attempted_completion_over = 1;
     if (start == 0)
         return rl_completion_matches(text, builtin_generator);
     return NULL;
@@ -179,15 +242,13 @@ int main(int argc, char *argv[])
 {
     setbuf(stdout, NULL);
 
-    // Set up tab completion
     rl_attempted_completion_function = shell_completion;
 
     while (1)
     {
         char *command = readline("$ ");
-        if (command == NULL) break;  // Ctrl+D
+        if (command == NULL) break;
 
-        // Skip empty input
         if (command[0] == '\0')
         {
             free(command);
@@ -202,12 +263,10 @@ int main(int argc, char *argv[])
 
         char *builtin = args[0];
 
-        // Check for redirection
         int is_stderr = 0;
         int is_append = 0;
         char *outfile = extract_redirect(args, &nargs, &is_stderr, &is_append);
 
-        // Save and redirect the right fd
         int saved_fd = -1;
         int target_fd = is_stderr ? STDERR_FILENO : STDOUT_FILENO;
 
