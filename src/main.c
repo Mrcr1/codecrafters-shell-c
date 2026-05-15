@@ -232,9 +232,11 @@ char *builtin_generator(const char *text, int state)
 char **shell_completion(const char *text, int start, int end)
 {
     (void)end;
-    rl_attempted_completion_over = 1;
     if (start == 0)
+    {
+        rl_attempted_completion_over = 1;
         return rl_completion_matches(text, builtin_generator);
+    }    
     return NULL;
 }
 
