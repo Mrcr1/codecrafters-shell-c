@@ -241,7 +241,7 @@ char **shell_completion(const char *text, int start, int end)
 }
 
 // Support code for Complete Builtin:
-#define MAX_Completions 256
+#define MAX_COMPLETIONS 256
 
 typedef struct
 {
