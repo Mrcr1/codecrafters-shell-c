@@ -240,6 +240,20 @@ char **shell_completion(const char *text, int start, int end)
     return NULL;
 }
 
+// Support code for Complete Builtin:
+#define MAX_Completions 256
+
+typedef struct
+{
+    char *command;
+    char *script;
+}
+Completion;
+
+Completion completions[MAX_Completions];
+int completion_count = 0;
+
+
 int main(int argc, char *argv[])
 {
     setbuf(stdout, NULL);
@@ -347,9 +361,52 @@ int main(int argc, char *argv[])
         // complete builtin:
         else if (strcmp(builtin, "complete") ==0)
         {
-            if (nargs >= 3 && strcmp(args[1], "-p") == 0)
+            if (nargs >= 2 && strcmp(args[1], "-p") == 0)
             {
-                printf("complete: %s: no completion specification\n", args[2]);
+                if (nargs < 3)
+                {
+                    printf ("complete: missing argument\n");
+                }
+                else
+                {
+                    // Search for registered completion
+                    int found = 0;
+                    for (int i = 0; i < completion_count; i++)
+                    {
+                        if (strcmp(completions[i].command, args[2]) == 0)
+                        {
+                            prinf("complete: -C '%s' %s\n", completions[i].command, completions[i].script);
+                            found = 1;
+                            break;
+                        }
+                    }
+                    if (!found)
+                    {
+                        printf("complete: %s: no completion specification\n", args[2]);
+                    }
+                }
+                else if (nargs >= 4 && strcmp(args[1], "-C") == 0)
+                {
+                    // Register completion: args[2] = script, args[3] = command
+                    // Check if already registered — update if so
+                    int found = 0;
+                    for (int i = 0; i < completion_count; i++)
+                    {
+                        if (strcmp(completions[i].command, args[3]) == 0)
+                        {
+                            free(completions[i].script);
+                            completions[i].script = strdup(args[2]);
+                            found = 1;
+                            break;
+                        }
+                    }
+                    if (!found && completion_count < MAX_COMPLETIONS)
+                    {
+                        completions[completion_count].command = strdup(args[3]);
+                        completions[completion_count].script  = strdup(args[2]);
+                        completion_count++;
+                    }
+                }
             }
         }
 
