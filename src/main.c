@@ -144,7 +144,7 @@ char *extract_redirect(char **args, int *nargs, int *is_stderr, int *is_append)
 }
 
 // Builtins for TAB completion
-char *builtin_list[] = {"echo", "exit", "type", "pwd", "cd", NULL};
+char *builtin_list[] = {"echo", "exit", "type", "pwd", "cd", "complete", NULL};
 char **matches = NULL;
 int match_count = 0;
 
@@ -355,7 +355,7 @@ int main(int argc, char *argv[])
                 char *name = args[1];
                 if (!strcmp(name, "exit") || !strcmp(name, "echo") ||
                     !strcmp(name, "type") || !strcmp(name, "pwd") ||
-                    !strcmp(name, "cd"))
+                    !strcmp(name, "cd")   || !strcmp(name, "complete"))
                 {
                     printf("%s is a shell builtin\n", name);
                 }
