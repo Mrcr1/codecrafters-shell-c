@@ -343,6 +343,16 @@ int main(int argc, char *argv[])
             }
         }
 
+
+        // complete builtin:
+        else if (strcmp(builtin, "complete") ==0)
+        {
+            if (nargs >= 3 && strcmp(args[1], "-p") == 0)
+            {
+                printf("complete: %s: no completion specification\n", args[2]);
+            }
+        }
+
         // type builtin:
         else if (strcmp(builtin, "type") == 0)
         {
