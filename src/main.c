@@ -198,7 +198,6 @@ char *builtin_generator(const char *text, int state)
                             snprintf(full_path, sizeof(full_path), "%s/%s", dir, entry->d_name);
                             if (access(full_path, X_OK) == 0)
                             {
-                                // Deduplicate
                                 int dup = 0;
                                 for (int i = 0; i < match_count; i++)
                                 {
@@ -236,23 +235,21 @@ char **shell_completion(const char *text, int start, int end)
     {
         rl_attempted_completion_over = 1;
         return rl_completion_matches(text, builtin_generator);
-    }    
+    }
     return NULL;
 }
 
-// Support code for Complete Builtin:
+// Support code for complete builtin
 #define MAX_COMPLETIONS 256
 
 typedef struct
 {
     char *command;
     char *script;
-}
-Completion;
+} Completion;
 
-Completion completions[MAX_Completions];
+Completion completions[MAX_COMPLETIONS];
 int completion_count = 0;
-
 
 int main(int argc, char *argv[])
 {
@@ -357,7 +354,6 @@ int main(int argc, char *argv[])
             }
         }
 
-
         // complete builtin:
         else if (strcmp(builtin, "complete") == 0)
         {
@@ -404,6 +400,7 @@ int main(int argc, char *argv[])
                 }
             }
         }
+
         // type builtin:
         else if (strcmp(builtin, "type") == 0)
         {
