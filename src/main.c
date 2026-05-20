@@ -266,6 +266,20 @@ char *run_completer(const char *script)
     return strdup(buf);
 }
 
+static char *completer_result = NULL;
+
+char *completer_result_generator(const char *text, int state)
+{
+    (void)text;
+    if (state == 0 && completer_result != NULL)
+    {
+        char *result = completer_result;
+        completer_result = NULL;
+        return result;
+    }
+    return NULL;
+}
+
 char **shell_completion(const char *text, int start, int end)
 {
     (void)end;
@@ -274,6 +288,34 @@ char **shell_completion(const char *text, int start, int end)
         rl_attempted_completion_over = 1;
         return rl_completion_matches(text, builtin_generator);
     }
+
+    // Completing an argument — check if a completer is registered
+    // Extract the command name from the line buffer
+    char line_copy[1024];
+    strncpy(line_copy, rl_line_buffer, sizeof(line_copy) - 1);
+    line_copy[sizeof(line_copy) - 1] = '\0';
+
+    // Get just the first word (the command)
+    char *sp = strchr(line_copy, ' ');
+    if (sp) *sp = '\0';
+    char *cmd = line_copy;
+
+    // Look up registered completer
+    for (int i = 0; i < completion_count; i++)
+    {
+        if (strcmp(completions[i].command, cmd) == 0)
+        {
+            // Run the completer script
+            char *result = run_completer(completions[i].script);
+            if (result == NULL) return NULL;
+
+            completer_result = result;
+            rl_attempted_completion_over = 1;
+            return matches;
+        }
+    }
+
+    // No completer registered — fall back to filename completion
     return NULL;
 }
 
