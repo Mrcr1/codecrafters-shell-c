@@ -143,6 +143,19 @@ char *extract_redirect(char **args, int *nargs, int *is_stderr, int *is_append)
     return NULL;
 }
 
+// Support code for complete builtin
+#define MAX_COMPLETIONS 256
+
+typedef struct
+{
+    char *command;
+    char *script;
+} Completion;
+
+Completion completions[MAX_COMPLETIONS];
+int completion_count = 0;
+
+
 // Builtins for TAB completion
 char *builtin_list[] = {"echo", "exit", "type", "pwd", "cd", "complete", NULL};
 char **matches = NULL;
@@ -311,7 +324,7 @@ char **shell_completion(const char *text, int start, int end)
 
             completer_result = result;
             rl_attempted_completion_over = 1;
-            return matches;
+            return rl_completion_matches(text, completer_result_generator);
         }
     }
 
@@ -319,17 +332,6 @@ char **shell_completion(const char *text, int start, int end)
     return NULL;
 }
 
-// Support code for complete builtin
-#define MAX_COMPLETIONS 256
-
-typedef struct
-{
-    char *command;
-    char *script;
-} Completion;
-
-Completion completions[MAX_COMPLETIONS];
-int completion_count = 0;
 
 int main(int argc, char *argv[])
 {
