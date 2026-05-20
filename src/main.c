@@ -228,6 +228,44 @@ char *builtin_generator(const char *text, int state)
     return NULL;
 }
 
+// Run Completer function:
+
+char *run_completer(const char *script)
+{
+    int pipefd[2];
+    if (pipe(pipefd) < 0) return NULL;
+
+    pid_t pid = fork();
+    if (pid == 0)
+    {
+        // Child — redirect stdout to pipe write end
+        close(pipefd[0]);
+        dup2(pipefd[1], STDOUT_FILENO);
+        close(pipefd[1]);
+
+        execlp(script, script, NULL);
+        exit(1);
+    }
+
+    // Parent — read from pipe read end
+    close(pipefd[1]);
+    waitpid(pid, NULL, 0);
+
+    char buf[1024];
+    int n = read(pipefd[0], buf, sizeof(buf) - 1);
+    close(pipefd[0]);
+
+    if (n <= 0) return NULL;
+
+    buf[n] = '\0';
+
+    // Strip trailing newline
+    char *nl = strchr(buf, '\n');
+    if (nl) *nl = '\0';
+
+    return strdup(buf);
+}
+
 char **shell_completion(const char *text, int start, int end)
 {
     (void)end;
