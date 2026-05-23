@@ -238,7 +238,6 @@ char *builtin_generator(const char *text, int state)
     return NULL;
 }
 
-// Run completer and return ALL lines as a NULL-terminated array
 char **run_completer_multi(const char *script, const char *cmd, const char *word, const char *prev, const char *comp_line, int comp_point)
 {
     int pipefd[2];
@@ -272,7 +271,6 @@ char **run_completer_multi(const char *script, const char *cmd, const char *word
 
     buf[n] = '\0';
 
-    // Split output into lines
     char **results = malloc(sizeof(char *) * 256);
     int count = 0;
 
@@ -361,13 +359,11 @@ char **shell_completion(const char *text, int start, int end)
             completer_results = run_completer_multi(completions[i].script, cmd, word, prev, comp_line, comp_point);
             if (completer_results == NULL) return NULL;
 
-            // Count results
             int count = 0;
             while (completer_results[count] != NULL) count++;
 
             if (count == 0) return NULL;
 
-            // Sort alphabetically
             qsort(completer_results, count, sizeof(char *), compare_strings);
 
             rl_attempted_completion_over = 1;
@@ -500,6 +496,23 @@ int main(int argc, char *argv[])
                     if (!found)
                         printf("complete: %s: no completion specification\n", args[2]);
                 }
+            }
+            else if (nargs >= 3 && strcmp(args[1], "-r") == 0)
+            {
+                char *target = args[2];
+                for (int i = 0; i < completion_count; i++)
+                {
+                    if (strcmp(completions[i].command, target) == 0)
+                    {
+                        free(completions[i].command);
+                        free(completions[i].script);
+                        for (int j = i; j < completion_count - 1; j++)
+                            completions[j] = completions[j + 1];
+                        completion_count--;
+                        break;
+                    }
+                }
+                // No output on success or if not found
             }
             else if (nargs >= 4 && strcmp(args[1], "-C") == 0)
             {
