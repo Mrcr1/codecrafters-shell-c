@@ -238,7 +238,8 @@ char *builtin_generator(const char *text, int state)
     return NULL;
 }
 
-char *run_completer(const char *script, const char *cmd, const char *word, const char *prev, const char *comp_line, int comp_point)
+// Run completer and return ALL lines as a NULL-terminated array
+char **run_completer_multi(const char *script, const char *cmd, const char *word, const char *prev, const char *comp_line, int comp_point)
 {
     int pipefd[2];
     if (pipe(pipefd) < 0) return NULL;
@@ -250,7 +251,6 @@ char *run_completer(const char *script, const char *cmd, const char *word, const
         dup2(pipefd[1], STDOUT_FILENO);
         close(pipefd[1]);
 
-        // Set COMP_LINE and COMP_POINT as environment variables
         setenv("COMP_LINE", comp_line, 1);
 
         char comp_point_str[32];
@@ -264,7 +264,7 @@ char *run_completer(const char *script, const char *cmd, const char *word, const
     close(pipefd[1]);
     waitpid(pid, NULL, 0);
 
-    char buf[1024];
+    char buf[4096];
     int n = read(pipefd[0], buf, sizeof(buf) - 1);
     close(pipefd[0]);
 
@@ -272,24 +272,51 @@ char *run_completer(const char *script, const char *cmd, const char *word, const
 
     buf[n] = '\0';
 
-    char *nl = strchr(buf, '\n');
-    if (nl) *nl = '\0';
+    // Split output into lines
+    char **results = malloc(sizeof(char *) * 256);
+    int count = 0;
 
-    return strdup(buf);
+    char *line = strtok(buf, "\n");
+    while (line != NULL && count < 255)
+    {
+        results[count++] = strdup(line);
+        line = strtok(NULL, "\n");
+    }
+    results[count] = NULL;
+
+    return results;
 }
 
-static char *completer_result = NULL;
+static char **completer_results = NULL;
+static int completer_results_index = 0;
 
-char *completer_result_generator(const char *text, int state)
+char *completer_results_generator(const char *text, int state)
 {
     (void)text;
-    if (state == 0 && completer_result != NULL)
-    {
-        char *result = completer_result;
-        completer_result = NULL;
-        return result;
-    }
+    if (state == 0)
+        completer_results_index = 0;
+
+    if (completer_results != NULL && completer_results[completer_results_index] != NULL)
+        return strdup(completer_results[completer_results_index++]);
+
     return NULL;
+}
+
+void free_completer_results(void)
+{
+    if (completer_results != NULL)
+    {
+        for (int i = 0; completer_results[i] != NULL; i++)
+            free(completer_results[i]);
+        free(completer_results);
+        completer_results = NULL;
+    }
+    completer_results_index = 0;
+}
+
+int compare_strings(const void *a, const void *b)
+{
+    return strcmp(*(const char **)a, *(const char **)b);
 }
 
 char **shell_completion(const char *text, int start, int end)
@@ -322,7 +349,6 @@ char **shell_completion(const char *text, int start, int end)
 
     if (ntokens == 1) prev = "";
 
-    // COMP_LINE is the full line buffer
     const char *comp_line  = rl_line_buffer;
     int          comp_point = rl_point;
 
@@ -330,12 +356,22 @@ char **shell_completion(const char *text, int start, int end)
     {
         if (strcmp(completions[i].command, cmd) == 0)
         {
-            char *result = run_completer(completions[i].script, cmd, word, prev, comp_line, comp_point);
-            if (result == NULL) return NULL;
+            free_completer_results();
 
-            completer_result = result;
+            completer_results = run_completer_multi(completions[i].script, cmd, word, prev, comp_line, comp_point);
+            if (completer_results == NULL) return NULL;
+
+            // Count results
+            int count = 0;
+            while (completer_results[count] != NULL) count++;
+
+            if (count == 0) return NULL;
+
+            // Sort alphabetically
+            qsort(completer_results, count, sizeof(char *), compare_strings);
+
             rl_attempted_completion_over = 1;
-            return rl_completion_matches(text, completer_result_generator);
+            return rl_completion_matches(text, completer_results_generator);
         }
     }
 
