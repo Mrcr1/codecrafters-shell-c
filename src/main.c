@@ -182,14 +182,12 @@ char *builtin_generator(const char *text, int state)
         matches = malloc(sizeof(char *) * 1024);
         matches[0] = NULL;
 
-        // Add matching builtins
         for (int i = 0; builtin_list[i] != NULL; i++)
         {
             if (strncmp(builtin_list[i], text, len) == 0)
                 matches[match_count++] = strdup(builtin_list[i]);
         }
 
-        // Search PATH for matching executables
         char *path_env = getenv("PATH");
         if (path_env != NULL)
         {
@@ -240,7 +238,7 @@ char *builtin_generator(const char *text, int state)
     return NULL;
 }
 
-char *run_completer(const char *script, const char *cmd, const char *word, const char *prev)
+char *run_completer(const char *script, const char *cmd, const char *word, const char *prev, const char *comp_line, int comp_point)
 {
     int pipefd[2];
     if (pipe(pipefd) < 0) return NULL;
@@ -251,6 +249,13 @@ char *run_completer(const char *script, const char *cmd, const char *word, const
         close(pipefd[0]);
         dup2(pipefd[1], STDOUT_FILENO);
         close(pipefd[1]);
+
+        // Set COMP_LINE and COMP_POINT as environment variables
+        setenv("COMP_LINE", comp_line, 1);
+
+        char comp_point_str[32];
+        snprintf(comp_point_str, sizeof(comp_point_str), "%d", comp_point);
+        setenv("COMP_POINT", comp_point_str, 1);
 
         execlp(script, script, cmd, word, prev, NULL);
         exit(1);
@@ -296,12 +301,10 @@ char **shell_completion(const char *text, int start, int end)
         return rl_completion_matches(text, builtin_generator);
     }
 
-    // Extract command name and context from line buffer
     char line_copy[1024];
     strncpy(line_copy, rl_line_buffer, sizeof(line_copy) - 1);
     line_copy[sizeof(line_copy) - 1] = '\0';
 
-    // Tokenize to get cmd and previous word
     char *tokens[64];
     int ntokens = 0;
     char *t = strtok(line_copy, " \t");
@@ -319,12 +322,15 @@ char **shell_completion(const char *text, int start, int end)
 
     if (ntokens == 1) prev = "";
 
-    // Look up registered completer
+    // COMP_LINE is the full line buffer
+    const char *comp_line  = rl_line_buffer;
+    int          comp_point = rl_point;
+
     for (int i = 0; i < completion_count; i++)
     {
         if (strcmp(completions[i].command, cmd) == 0)
         {
-            char *result = run_completer(completions[i].script, cmd, word, prev);
+            char *result = run_completer(completions[i].script, cmd, word, prev, comp_line, comp_point);
             if (result == NULL) return NULL;
 
             completer_result = result;
@@ -384,7 +390,6 @@ int main(int argc, char *argv[])
             close(fd);
         }
 
-        // Exit builtin:
         if (strcmp(builtin, "exit") == 0)
         {
             if (outfile) { dup2(saved_fd, target_fd); close(saved_fd); free(outfile); }
@@ -392,7 +397,6 @@ int main(int argc, char *argv[])
             break;
         }
 
-        // Echo builtin:
         else if (strcmp(builtin, "echo") == 0)
         {
             for (int i = 1; i < nargs; i++)
@@ -403,7 +407,6 @@ int main(int argc, char *argv[])
             printf("\n");
         }
 
-        // pwd builtin:
         else if (strcmp(builtin, "pwd") == 0)
         {
             char cwd[1024];
@@ -413,7 +416,6 @@ int main(int argc, char *argv[])
                 perror("pwd");
         }
 
-        // cd builtin:
         else if (strcmp(builtin, "cd") == 0)
         {
             if (nargs < 2)
@@ -439,7 +441,6 @@ int main(int argc, char *argv[])
             }
         }
 
-        // complete builtin:
         else if (strcmp(builtin, "complete") == 0)
         {
             if (nargs >= 2 && strcmp(args[1], "-p") == 0)
@@ -486,7 +487,6 @@ int main(int argc, char *argv[])
             }
         }
 
-        // type builtin:
         else if (strcmp(builtin, "type") == 0)
         {
             if (nargs < 2)
@@ -518,7 +518,6 @@ int main(int argc, char *argv[])
             }
         }
 
-        // External program execution:
         else
         {
             char *full_path = find_in_path(builtin);
@@ -550,7 +549,6 @@ int main(int argc, char *argv[])
             }
         }
 
-        // Restore fd
         if (outfile != NULL)
         {
             fflush(stdout);
