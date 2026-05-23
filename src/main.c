@@ -315,7 +315,7 @@ char **shell_completion(const char *text, int start, int end)
 
     char *cmd  = tokens[0];
     char *word = (char *)text;
-    char *prev = ntokens >= 2 ? tokens[ntokens - 1] : "";
+    char *prev = ntokens >= 2 ? tokens[ntokens - 2] : "";
 
     if (ntokens == 1) prev = "";
 
