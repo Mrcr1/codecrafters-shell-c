@@ -155,7 +155,6 @@ typedef struct
 Completion completions[MAX_COMPLETIONS];
 int completion_count = 0;
 
-
 // Builtins for TAB completion
 char *builtin_list[] = {"echo", "exit", "type", "pwd", "cd", "complete", NULL};
 char **matches = NULL;
@@ -241,9 +240,7 @@ char *builtin_generator(const char *text, int state)
     return NULL;
 }
 
-// Run Completer function:
-
-char *run_completer(const char *script)
+char *run_completer(const char *script, const char *cmd, const char *word, const char *prev)
 {
     int pipefd[2];
     if (pipe(pipefd) < 0) return NULL;
@@ -251,16 +248,14 @@ char *run_completer(const char *script)
     pid_t pid = fork();
     if (pid == 0)
     {
-        // Child — redirect stdout to pipe write end
         close(pipefd[0]);
         dup2(pipefd[1], STDOUT_FILENO);
         close(pipefd[1]);
 
-        execlp(script, script, NULL);
+        execlp(script, script, cmd, word, prev, NULL);
         exit(1);
     }
 
-    // Parent — read from pipe read end
     close(pipefd[1]);
     waitpid(pid, NULL, 0);
 
@@ -272,7 +267,6 @@ char *run_completer(const char *script)
 
     buf[n] = '\0';
 
-    // Strip trailing newline
     char *nl = strchr(buf, '\n');
     if (nl) *nl = '\0';
 
@@ -302,24 +296,35 @@ char **shell_completion(const char *text, int start, int end)
         return rl_completion_matches(text, builtin_generator);
     }
 
-    // Completing an argument — check if a completer is registered
-    // Extract the command name from the line buffer
+    // Extract command name and context from line buffer
     char line_copy[1024];
     strncpy(line_copy, rl_line_buffer, sizeof(line_copy) - 1);
     line_copy[sizeof(line_copy) - 1] = '\0';
 
-    // Get just the first word (the command)
-    char *sp = strchr(line_copy, ' ');
-    if (sp) *sp = '\0';
-    char *cmd = line_copy;
+    // Tokenize to get cmd and previous word
+    char *tokens[64];
+    int ntokens = 0;
+    char *t = strtok(line_copy, " \t");
+    while (t != NULL && ntokens < 63)
+    {
+        tokens[ntokens++] = t;
+        t = strtok(NULL, " \t");
+    }
+
+    if (ntokens == 0) return NULL;
+
+    char *cmd  = tokens[0];
+    char *word = (char *)text;
+    char *prev = ntokens >= 2 ? tokens[ntokens - 1] : "";
+
+    if (ntokens == 1) prev = "";
 
     // Look up registered completer
     for (int i = 0; i < completion_count; i++)
     {
         if (strcmp(completions[i].command, cmd) == 0)
         {
-            // Run the completer script
-            char *result = run_completer(completions[i].script);
+            char *result = run_completer(completions[i].script, cmd, word, prev);
             if (result == NULL) return NULL;
 
             completer_result = result;
@@ -328,10 +333,8 @@ char **shell_completion(const char *text, int start, int end)
         }
     }
 
-    // No completer registered — fall back to filename completion
     return NULL;
 }
-
 
 int main(int argc, char *argv[])
 {
