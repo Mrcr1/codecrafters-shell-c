@@ -156,7 +156,7 @@ Completion completions[MAX_COMPLETIONS];
 int completion_count = 0;
 
 // Builtins for TAB completion
-char *builtin_list[] = {"echo", "exit", "type", "pwd", "cd", "complete", NULL};
+char *builtin_list[] = {"echo", "exit", "type", "pwd", "cd", "complete", "jobs", NULL};
 char **matches = NULL;
 int match_count = 0;
 
@@ -512,7 +512,6 @@ int main(int argc, char *argv[])
                         break;
                     }
                 }
-                // No output on success or if not found
             }
             else if (nargs >= 4 && strcmp(args[1], "-C") == 0)
             {
@@ -536,6 +535,12 @@ int main(int argc, char *argv[])
             }
         }
 
+        // jobs builtin:
+        else if (strcmp(builtin, "jobs") == 0)
+        {
+            // Empty implementation — no output when no background jobs
+        }
+
         else if (strcmp(builtin, "type") == 0)
         {
             if (nargs < 2)
@@ -547,7 +552,8 @@ int main(int argc, char *argv[])
                 char *name = args[1];
                 if (!strcmp(name, "exit") || !strcmp(name, "echo") ||
                     !strcmp(name, "type") || !strcmp(name, "pwd") ||
-                    !strcmp(name, "cd")   || !strcmp(name, "complete"))
+                    !strcmp(name, "cd")   || !strcmp(name, "complete") ||
+                    !strcmp(name, "jobs"))
                 {
                     printf("%s is a shell builtin\n", name);
                 }
