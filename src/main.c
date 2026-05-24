@@ -163,12 +163,68 @@ typedef struct
     int    job_num;
     pid_t  pid;
     char  *cmd;
-    char  *status;  // "Running" or "Done"
+    char  *status;
 } Job;
 
 Job jobs_list[MAX_JOBS];
 int jobs_count = 0;
 int job_counter = 0;
+
+// Reap completed jobs — shared by both auto-reap and jobs builtin
+void reap_jobs(int print_done)
+{
+    // Step 1 — check each job for exit
+    for (int i = 0; i < jobs_count; i++)
+    {
+        int wstatus = 0;
+        pid_t result = waitpid(jobs_list[i].pid, &wstatus, WNOHANG);
+        if (result > 0 && WIFEXITED(wstatus))
+        {
+            free(jobs_list[i].status);
+            jobs_list[i].status = strdup("Done");
+        }
+    }
+
+    // Step 2 — print Done jobs if requested
+    if (print_done)
+    {
+        for (int i = 0; i < jobs_count; i++)
+        {
+            if (strcmp(jobs_list[i].status, "Done") == 0)
+            {
+                char marker;
+                if (i == jobs_count - 1)
+                    marker = '+';
+                else if (i == jobs_count - 2)
+                    marker = '-';
+                else
+                    marker = ' ';
+
+                printf("[%d]%c  %-24s%s\n",
+                    jobs_list[i].job_num,
+                    marker,
+                    jobs_list[i].status,
+                    jobs_list[i].cmd);
+            }
+        }
+    }
+
+    // Step 3 — remove Done jobs
+    int new_count = 0;
+    for (int i = 0; i < jobs_count; i++)
+    {
+        if (strcmp(jobs_list[i].status, "Done") == 0)
+        {
+            free(jobs_list[i].cmd);
+            free(jobs_list[i].status);
+        }
+        else
+        {
+            jobs_list[new_count++] = jobs_list[i];
+        }
+    }
+    jobs_count = new_count;
+}
 
 // Builtins for TAB completion
 char *builtin_list[] = {"echo", "exit", "type", "pwd", "cd", "complete", "jobs", NULL};
@@ -397,6 +453,9 @@ int main(int argc, char *argv[])
 
     while (1)
     {
+        // Auto-reap before each prompt — print Done lines
+        reap_jobs(1);
+
         char *command = readline("$ ");
         if (command == NULL) break;
 
@@ -569,19 +628,10 @@ int main(int argc, char *argv[])
         // jobs builtin:
         else if (strcmp(builtin, "jobs") == 0)
         {
-            // Step 1 — check each job for exit using WNOHANG
-            for (int i = 0; i < jobs_count; i++)
-            {
-                int wstatus = 0;
-                pid_t result = waitpid(jobs_list[i].pid, &wstatus, WNOHANG);
-                if (result > 0 && WIFEXITED(wstatus))
-                {
-                    free(jobs_list[i].status);
-                    jobs_list[i].status = strdup("Done");
-                }
-            }
+            // Reap first — don't print Done here, just update status
+            reap_jobs(0);
 
-            // Step 2 — determine marker and print all jobs
+            // Print all remaining jobs with markers
             for (int i = 0; i < jobs_count; i++)
             {
                 char marker;
@@ -608,7 +658,7 @@ int main(int argc, char *argv[])
                         jobs_list[i].cmd);
             }
 
-            // Step 3 — remove Done jobs from the list
+            // Remove Done jobs after printing
             int new_count = 0;
             for (int i = 0; i < jobs_count; i++)
             {
