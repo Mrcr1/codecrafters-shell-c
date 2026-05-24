@@ -155,7 +155,19 @@ typedef struct
 Completion completions[MAX_COMPLETIONS];
 int completion_count = 0;
 
-// Background job counter
+// Background job tracking
+#define MAX_JOBS 256
+
+typedef struct
+{
+    int    job_num;
+    pid_t  pid;
+    char  *cmd;
+    char  *status;
+} Job;
+
+Job jobs_list[MAX_JOBS];
+int jobs_count = 0;
 int job_counter = 0;
 
 // Builtins for TAB completion
@@ -554,9 +566,16 @@ int main(int argc, char *argv[])
             }
         }
 
+        // jobs builtin:
         else if (strcmp(builtin, "jobs") == 0)
         {
-            // Empty implementation — no output when no background jobs
+            for (int i = 0; i < jobs_count; i++)
+            {
+                printf("[%d]+  %-24s%s &\n",
+                    jobs_list[i].job_num,
+                    jobs_list[i].status,
+                    jobs_list[i].cmd);
+            }
         }
 
         else if (strcmp(builtin, "type") == 0)
@@ -614,8 +633,23 @@ int main(int argc, char *argv[])
                     if (is_background)
                     {
                         job_counter++;
+
+                        // Build command string from args
+                        char cmd_str[1024] = "";
+                        for (int i = 0; i < nargs; i++)
+                        {
+                            if (i > 0) strcat(cmd_str, " ");
+                            strcat(cmd_str, args[i]);
+                        }
+
+                        // Store job
+                        jobs_list[jobs_count].job_num = job_counter;
+                        jobs_list[jobs_count].pid     = pid;
+                        jobs_list[jobs_count].cmd     = strdup(cmd_str);
+                        jobs_list[jobs_count].status  = strdup("Running");
+                        jobs_count++;
+
                         printf("[%d] %d\n", job_counter, pid);
-                        // Don't waitpid — let it run in background
                     }
                     else
                     {
