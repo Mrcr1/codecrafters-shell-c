@@ -571,8 +571,17 @@ int main(int argc, char *argv[])
         {
             for (int i = 0; i < jobs_count; i++)
             {
-                printf("[%d]+  %-24s%s &\n",
+                char marker;
+                if (i == jobs_count - 1)
+                    marker = '+';
+                else if (i == jobs_count - 2)
+                    marker = '-';
+                else
+                    marker = ' ';
+
+                printf("[%d]%c  %-24s%s &\n",
                     jobs_list[i].job_num,
+                    marker,
                     jobs_list[i].status,
                     jobs_list[i].cmd);
             }
@@ -634,7 +643,6 @@ int main(int argc, char *argv[])
                     {
                         job_counter++;
 
-                        // Build command string from args
                         char cmd_str[1024] = "";
                         for (int i = 0; i < nargs; i++)
                         {
@@ -642,7 +650,6 @@ int main(int argc, char *argv[])
                             strcat(cmd_str, args[i]);
                         }
 
-                        // Store job
                         jobs_list[jobs_count].job_num = job_counter;
                         jobs_list[jobs_count].pid     = pid;
                         jobs_list[jobs_count].cmd     = strdup(cmd_str);
