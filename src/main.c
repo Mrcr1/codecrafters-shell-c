@@ -155,6 +155,9 @@ typedef struct
 Completion completions[MAX_COMPLETIONS];
 int completion_count = 0;
 
+// Background job counter
+int job_counter = 0;
+
 // Builtins for TAB completion
 char *builtin_list[] = {"echo", "exit", "type", "pwd", "cd", "complete", "jobs", NULL};
 char **matches = NULL;
@@ -397,6 +400,22 @@ int main(int argc, char *argv[])
 
         if (nargs == 0) continue;
 
+        // Check for background operator &
+        int is_background = 0;
+        if (nargs > 0 && strcmp(args[nargs - 1], "&") == 0)
+        {
+            is_background = 1;
+            free(args[nargs - 1]);
+            args[nargs - 1] = NULL;
+            nargs--;
+        }
+
+        if (nargs == 0)
+        {
+            free_args(args, 0);
+            continue;
+        }
+
         char *builtin = args[0];
 
         int is_stderr = 0;
@@ -535,7 +554,6 @@ int main(int argc, char *argv[])
             }
         }
 
-        // jobs builtin:
         else if (strcmp(builtin, "jobs") == 0)
         {
             // Empty implementation — no output when no background jobs
@@ -593,7 +611,16 @@ int main(int argc, char *argv[])
                 }
                 else if (pid > 0)
                 {
-                    waitpid(pid, NULL, 0);
+                    if (is_background)
+                    {
+                        job_counter++;
+                        printf("[%d] %d\n", job_counter, pid);
+                        // Don't waitpid — let it run in background
+                    }
+                    else
+                    {
+                        waitpid(pid, NULL, 0);
+                    }
                 }
                 else
                 {
