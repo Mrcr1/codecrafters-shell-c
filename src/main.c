@@ -163,7 +163,7 @@ typedef struct
     int    job_num;
     pid_t  pid;
     char  *cmd;
-    char  *status;
+    char  *status;  // "Running" or "Done"
 } Job;
 
 Job jobs_list[MAX_JOBS];
@@ -569,6 +569,19 @@ int main(int argc, char *argv[])
         // jobs builtin:
         else if (strcmp(builtin, "jobs") == 0)
         {
+            // Step 1 — check each job for exit using WNOHANG
+            for (int i = 0; i < jobs_count; i++)
+            {
+                int wstatus = 0;
+                pid_t result = waitpid(jobs_list[i].pid, &wstatus, WNOHANG);
+                if (result > 0 && WIFEXITED(wstatus))
+                {
+                    free(jobs_list[i].status);
+                    jobs_list[i].status = strdup("Done");
+                }
+            }
+
+            // Step 2 — determine marker and print all jobs
             for (int i = 0; i < jobs_count; i++)
             {
                 char marker;
@@ -579,12 +592,37 @@ int main(int argc, char *argv[])
                 else
                     marker = ' ';
 
-                printf("[%d]%c  %-24s%s &\n",
-                    jobs_list[i].job_num,
-                    marker,
-                    jobs_list[i].status,
-                    jobs_list[i].cmd);
+                int is_done = strcmp(jobs_list[i].status, "Done") == 0;
+
+                if (is_done)
+                    printf("[%d]%c  %-24s%s\n",
+                        jobs_list[i].job_num,
+                        marker,
+                        jobs_list[i].status,
+                        jobs_list[i].cmd);
+                else
+                    printf("[%d]%c  %-24s%s &\n",
+                        jobs_list[i].job_num,
+                        marker,
+                        jobs_list[i].status,
+                        jobs_list[i].cmd);
             }
+
+            // Step 3 — remove Done jobs from the list
+            int new_count = 0;
+            for (int i = 0; i < jobs_count; i++)
+            {
+                if (strcmp(jobs_list[i].status, "Done") == 0)
+                {
+                    free(jobs_list[i].cmd);
+                    free(jobs_list[i].status);
+                }
+                else
+                {
+                    jobs_list[new_count++] = jobs_list[i];
+                }
+            }
+            jobs_count = new_count;
         }
 
         else if (strcmp(builtin, "type") == 0)
