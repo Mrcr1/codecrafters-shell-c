@@ -1,3 +1,14 @@
 {
-    "C_Cpp.errorSquiggles": "disabled"
+    "C_Cpp.errorSquiggles": "disabled",
+    "workbench.editor.autoLockGroups": {
+        "sqldeveloper.dataImport.editor": true,
+        "oracle-sql-notebook": true,
+        "workbench.editor.browser": true,
+        "sqldeveloper.editor.browser": true,
+        "vscode.videoPreview": true,
+        "vscode.audioPreview": true,
+        "imagePreview.previewEditor": true,
+        "pdf.preview": true,
+        "mainThreadWebview-markdown.preview": true
+    }
 }
