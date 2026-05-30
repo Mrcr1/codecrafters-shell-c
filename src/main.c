@@ -62,17 +62,14 @@ int parse_args(char *input, char **args, int max_args)
                 p++;
                 while (*p != '\0' && *p != '"')
                 {
-                    if (*p == '\\' && (*(p + 1) == '"' || *(p + 1) == '\\'))
+                    if (*p == '\\' && (*(p+1) == '"' || *(p+1) == '\\'))
                     {
                         p++;
                         buf[buf_len++] = *p++;
                     }
                     else
-                    {
                         buf[buf_len++] = *p++;
-                    }
                 }
-
                 if (*p == '"') p++;
             }
             else if (*p == '\\')
@@ -130,14 +127,11 @@ char *extract_redirect(char **args, int *nargs, int *is_stderr, int *is_append)
             *is_append = 0;
         }
         else
-        {
             continue;
-        }
 
         if (i + 1 < *nargs)
         {
             char *file = args[i + 1];
-
             free(args[i]);
 
             for (int j = i; j < *nargs - 2; j++)
@@ -153,6 +147,7 @@ char *extract_redirect(char **args, int *nargs, int *is_stderr, int *is_append)
     return NULL;
 }
 
+// PIPELINE SUPPORT
 int find_pipe(char **args, int nargs)
 {
     for (int i = 0; i < nargs; i++)
@@ -164,74 +159,7 @@ int find_pipe(char **args, int nargs)
     return -1;
 }
 
-int is_builtin(char *cmd)
-{
-    return !strcmp(cmd, "exit") ||
-           !strcmp(cmd, "echo") ||
-           !strcmp(cmd, "type") ||
-           !strcmp(cmd, "pwd") ||
-           !strcmp(cmd, "cd") ||
-           !strcmp(cmd, "complete") ||
-           !strcmp(cmd, "jobs");
-}
-
-void execute_builtin(char **args, int nargs)
-{
-    char *builtin = args[0];
-
-    if (strcmp(builtin, "echo") == 0)
-    {
-        for (int i = 1; i < nargs; i++)
-        {
-            if (i > 1) printf(" ");
-            printf("%s", args[i]);
-        }
-
-        printf("\n");
-    }
-
-    else if (strcmp(builtin, "pwd") == 0)
-    {
-        char cwd[1024];
-
-        if (getcwd(cwd, sizeof(cwd)) != NULL)
-            printf("%s\n", cwd);
-        else
-            perror("pwd");
-    }
-
-    else if (strcmp(builtin, "type") == 0)
-    {
-        if (nargs < 2)
-        {
-            printf("type: missing argument\n");
-        }
-        else
-        {
-            char *name = args[1];
-
-            if (is_builtin(name))
-            {
-                printf("%s is a shell builtin\n", name);
-            }
-            else
-            {
-                char *full_path = find_in_path(name);
-
-                if (full_path != NULL)
-                {
-                    printf("%s is %s\n", name, full_path);
-                    free(full_path);
-                }
-                else
-                {
-                    printf("%s: not found\n", name);
-                }
-            }
-        }
-    }
-}
-
+// Support code for complete builtin
 #define MAX_COMPLETIONS 256
 
 typedef struct
@@ -243,20 +171,135 @@ typedef struct
 Completion completions[MAX_COMPLETIONS];
 int completion_count = 0;
 
+// Background job tracking
 #define MAX_JOBS 256
 
 typedef struct
 {
-    int job_num;
-    pid_t pid;
-    char *cmd;
-    char *status;
+    int    job_num;
+    pid_t  pid;
+    char  *cmd;
+    char  *status;
 } Job;
 
 Job jobs_list[MAX_JOBS];
 int jobs_count = 0;
 
-char *builtin_list[] = {"echo", "exit", "type", "pwd", "cd", "complete", "jobs", NULL};
+// Find the smallest available job number
+int next_job_num(void)
+{
+    int candidate = 1;
+
+    while (1)
+    {
+        int taken = 0;
+
+        for (int i = 0; i < jobs_count; i++)
+        {
+            if (jobs_list[i].job_num == candidate)
+            {
+                taken = 1;
+                break;
+            }
+        }
+
+        if (!taken) return candidate;
+
+        candidate++;
+    }
+}
+
+// Compute markers based on job_num
+void get_markers(char *markers)
+{
+    int max1 = -1, max2 = -1;
+
+    for (int i = 0; i < jobs_count; i++)
+    {
+        if (jobs_list[i].job_num > max1)
+        {
+            max2 = max1;
+            max1 = jobs_list[i].job_num;
+        }
+        else if (jobs_list[i].job_num > max2)
+        {
+            max2 = jobs_list[i].job_num;
+        }
+    }
+
+    for (int i = 0; i < jobs_count; i++)
+    {
+        if (jobs_list[i].job_num == max1)
+            markers[i] = '+';
+        else if (jobs_list[i].job_num == max2)
+            markers[i] = '-';
+        else
+            markers[i] = ' ';
+    }
+}
+
+void reap_jobs(int print_done)
+{
+    for (int i = 0; i < jobs_count; i++)
+    {
+        int wstatus = 0;
+
+        pid_t result = waitpid(jobs_list[i].pid, &wstatus, WNOHANG);
+
+        if (result > 0 && WIFEXITED(wstatus))
+        {
+            free(jobs_list[i].status);
+            jobs_list[i].status = strdup("Done");
+        }
+    }
+
+    if (print_done)
+    {
+        char markers[MAX_JOBS];
+        get_markers(markers);
+
+        for (int i = 0; i < jobs_count; i++)
+        {
+            if (strcmp(jobs_list[i].status, "Done") == 0)
+            {
+                printf("[%d]%c  %-24s%s\n",
+                    jobs_list[i].job_num,
+                    markers[i],
+                    jobs_list[i].status,
+                    jobs_list[i].cmd);
+            }
+        }
+    }
+
+    int new_count = 0;
+
+    for (int i = 0; i < jobs_count; i++)
+    {
+        if (strcmp(jobs_list[i].status, "Done") == 0)
+        {
+            free(jobs_list[i].cmd);
+            free(jobs_list[i].status);
+        }
+        else
+        {
+            jobs_list[new_count++] = jobs_list[i];
+        }
+    }
+
+    jobs_count = new_count;
+}
+
+// Builtins for TAB completion
+char *builtin_list[] = {
+    "echo",
+    "exit",
+    "type",
+    "pwd",
+    "cd",
+    "complete",
+    "jobs",
+    NULL
+};
 
 char **matches = NULL;
 int match_count = 0;
@@ -311,7 +354,8 @@ char *builtin_generator(const char *text, int state)
                         {
                             char full_path[1024];
 
-                            snprintf(full_path, sizeof(full_path), "%s/%s", dir, entry->d_name);
+                            snprintf(full_path, sizeof(full_path),
+                                     "%s/%s", dir, entry->d_name);
 
                             if (access(full_path, X_OK) == 0)
                             {
@@ -350,6 +394,112 @@ char *builtin_generator(const char *text, int state)
     return NULL;
 }
 
+char **run_completer_multi(const char *script,
+                           const char *cmd,
+                           const char *word,
+                           const char *prev,
+                           const char *comp_line,
+                           int comp_point)
+{
+    int pipefd[2];
+
+    if (pipe(pipefd) < 0) return NULL;
+
+    pid_t pid = fork();
+
+    if (pid == 0)
+    {
+        close(pipefd[0]);
+
+        dup2(pipefd[1], STDOUT_FILENO);
+
+        close(pipefd[1]);
+
+        setenv("COMP_LINE", comp_line, 1);
+
+        char comp_point_str[32];
+
+        snprintf(comp_point_str,
+                 sizeof(comp_point_str),
+                 "%d",
+                 comp_point);
+
+        setenv("COMP_POINT", comp_point_str, 1);
+
+        execlp(script, script, cmd, word, prev, NULL);
+
+        exit(1);
+    }
+
+    close(pipefd[1]);
+
+    waitpid(pid, NULL, 0);
+
+    char buf[4096];
+
+    int n = read(pipefd[0], buf, sizeof(buf) - 1);
+
+    close(pipefd[0]);
+
+    if (n <= 0) return NULL;
+
+    buf[n] = '\0';
+
+    char **results = malloc(sizeof(char *) * 256);
+
+    int count = 0;
+
+    char *line = strtok(buf, "\n");
+
+    while (line != NULL && count < 255)
+    {
+        results[count++] = strdup(line);
+        line = strtok(NULL, "\n");
+    }
+
+    results[count] = NULL;
+
+    return results;
+}
+
+static char **completer_results = NULL;
+static int completer_results_index = 0;
+
+char *completer_results_generator(const char *text, int state)
+{
+    (void)text;
+
+    if (state == 0)
+        completer_results_index = 0;
+
+    if (completer_results != NULL &&
+        completer_results[completer_results_index] != NULL)
+    {
+        return strdup(completer_results[completer_results_index++]);
+    }
+
+    return NULL;
+}
+
+void free_completer_results(void)
+{
+    if (completer_results != NULL)
+    {
+        for (int i = 0; completer_results[i] != NULL; i++)
+            free(completer_results[i]);
+
+        free(completer_results);
+        completer_results = NULL;
+    }
+
+    completer_results_index = 0;
+}
+
+int compare_strings(const void *a, const void *b)
+{
+    return strcmp(*(const char **)a, *(const char **)b);
+}
+
 char **shell_completion(const char *text, int start, int end)
 {
     (void)end;
@@ -358,6 +508,76 @@ char **shell_completion(const char *text, int start, int end)
     {
         rl_attempted_completion_over = 1;
         return rl_completion_matches(text, builtin_generator);
+    }
+
+    char line_copy[1024];
+
+    strncpy(line_copy, rl_line_buffer, sizeof(line_copy) - 1);
+
+    line_copy[sizeof(line_copy) - 1] = '\0';
+
+    char *tokens[64];
+    int ntokens = 0;
+
+    char *t = strtok(line_copy, " \t");
+
+    while (t != NULL && ntokens < 63)
+    {
+        tokens[ntokens++] = t;
+        t = strtok(NULL, " \t");
+    }
+
+    if (ntokens == 0) return NULL;
+
+    char *cmd  = tokens[0];
+    char *word = (char *)text;
+
+    char *prev = ntokens >= 2 ? tokens[ntokens - 2] : "";
+
+    if (ntokens == 1)
+        prev = "";
+
+    const char *comp_line = rl_line_buffer;
+    int comp_point = rl_point;
+
+    for (int i = 0; i < completion_count; i++)
+    {
+        if (strcmp(completions[i].command, cmd) == 0)
+        {
+            free_completer_results();
+
+            completer_results = run_completer_multi(
+                completions[i].script,
+                cmd,
+                word,
+                prev,
+                comp_line,
+                comp_point
+            );
+
+            if (completer_results == NULL)
+                return NULL;
+
+            int count = 0;
+
+            while (completer_results[count] != NULL)
+                count++;
+
+            if (count == 0)
+                return NULL;
+
+            qsort(completer_results,
+                  count,
+                  sizeof(char *),
+                  compare_strings);
+
+            rl_attempted_completion_over = 1;
+
+            return rl_completion_matches(
+                text,
+                completer_results_generator
+            );
+        }
     }
 
     return NULL;
@@ -371,6 +591,8 @@ int main(int argc, char *argv[])
 
     while (1)
     {
+        reap_jobs(1);
+
         char *command = readline("$ ");
 
         if (command == NULL)
@@ -391,6 +613,7 @@ int main(int argc, char *argv[])
         if (nargs == 0)
             continue;
 
+        // PIPELINE DETECTION
         int pipe_index = find_pipe(args, nargs);
 
         if (pipe_index != -1)
@@ -400,15 +623,34 @@ int main(int argc, char *argv[])
             char **left_args = args;
             char **right_args = &args[pipe_index + 1];
 
-            int left_argc = pipe_index;
-            int right_argc = nargs - pipe_index - 1;
+            char *left_path = find_in_path(left_args[0]);
+            char *right_path = find_in_path(right_args[0]);
+
+            if (left_path == NULL)
+            {
+                printf("%s: command not found\n", left_args[0]);
+                free_args(args, nargs);
+                continue;
+            }
+
+            if (right_path == NULL)
+            {
+                printf("%s: command not found\n", right_args[0]);
+                free(left_path);
+                free_args(args, nargs);
+                continue;
+            }
 
             int pipefd[2];
 
             if (pipe(pipefd) < 0)
             {
                 perror("pipe");
+
+                free(left_path);
+                free(right_path);
                 free_args(args, nargs);
+
                 continue;
             }
 
@@ -420,20 +662,6 @@ int main(int argc, char *argv[])
 
                 close(pipefd[0]);
                 close(pipefd[1]);
-
-                if (is_builtin(left_args[0]))
-                {
-                    execute_builtin(left_args, left_argc);
-                    exit(0);
-                }
-
-                char *left_path = find_in_path(left_args[0]);
-
-                if (left_path == NULL)
-                {
-                    printf("%s: command not found\n", left_args[0]);
-                    exit(1);
-                }
 
                 execv(left_path, left_args);
 
@@ -450,20 +678,6 @@ int main(int argc, char *argv[])
                 close(pipefd[1]);
                 close(pipefd[0]);
 
-                if (is_builtin(right_args[0]))
-                {
-                    execute_builtin(right_args, right_argc);
-                    exit(0);
-                }
-
-                char *right_path = find_in_path(right_args[0]);
-
-                if (right_path == NULL)
-                {
-                    printf("%s: command not found\n", right_args[0]);
-                    exit(1);
-                }
-
                 execv(right_path, right_args);
 
                 perror("execv");
@@ -476,22 +690,339 @@ int main(int argc, char *argv[])
             waitpid(pid1, NULL, 0);
             waitpid(pid2, NULL, 0);
 
+            free(left_path);
+            free(right_path);
+
             free_args(args, nargs);
 
             continue;
         }
 
+        int is_background = 0;
+
+        if (nargs > 0 && strcmp(args[nargs - 1], "&") == 0)
+        {
+            is_background = 1;
+
+            free(args[nargs - 1]);
+
+            args[nargs - 1] = NULL;
+
+            nargs--;
+        }
+
+        if (nargs == 0)
+        {
+            free_args(args, 0);
+            continue;
+        }
+
         char *builtin = args[0];
+
+        int is_stderr = 0;
+        int is_append = 0;
+
+        char *outfile = extract_redirect(
+            args,
+            &nargs,
+            &is_stderr,
+            &is_append
+        );
+
+        int saved_fd = -1;
+
+        int target_fd = is_stderr
+                        ? STDERR_FILENO
+                        : STDOUT_FILENO;
+
+        if (outfile != NULL)
+        {
+            saved_fd = dup(target_fd);
+
+            int flags = O_WRONLY |
+                        O_CREAT |
+                        (is_append ? O_APPEND : O_TRUNC);
+
+            int fd = open(outfile, flags, 0644);
+
+            if (fd < 0)
+            {
+                perror("open");
+
+                free(outfile);
+
+                free_args(args, nargs);
+
+                continue;
+            }
+
+            dup2(fd, target_fd);
+
+            close(fd);
+        }
 
         if (strcmp(builtin, "exit") == 0)
         {
+            if (outfile)
+            {
+                dup2(saved_fd, target_fd);
+                close(saved_fd);
+                free(outfile);
+            }
+
             free_args(args, nargs);
+
             break;
         }
 
-        else if (is_builtin(builtin))
+        else if (strcmp(builtin, "echo") == 0)
         {
-            execute_builtin(args, nargs);
+            for (int i = 1; i < nargs; i++)
+            {
+                if (i > 1)
+                    printf(" ");
+
+                printf("%s", args[i]);
+            }
+
+            printf("\n");
+        }
+
+        else if (strcmp(builtin, "pwd") == 0)
+        {
+            char cwd[1024];
+
+            if (getcwd(cwd, sizeof(cwd)) != NULL)
+                printf("%s\n", cwd);
+            else
+                perror("pwd");
+        }
+
+        else if (strcmp(builtin, "cd") == 0)
+        {
+            if (nargs < 2)
+            {
+                printf("cd: missing argument\n");
+            }
+            else
+            {
+                char *path = args[1];
+
+                if (strcmp(path, "~") == 0)
+                {
+                    path = getenv("HOME");
+
+                    if (path == NULL)
+                    {
+                        printf("cd: HOME not set\n");
+
+                        if (outfile)
+                        {
+                            dup2(saved_fd, target_fd);
+                            close(saved_fd);
+                            free(outfile);
+                        }
+
+                        free_args(args, nargs);
+
+                        continue;
+                    }
+                }
+
+                if (chdir(path) != 0)
+                    printf("cd: %s: No such file or directory\n", args[1]);
+            }
+        }
+
+        else if (strcmp(builtin, "complete") == 0)
+        {
+            if (nargs >= 2 && strcmp(args[1], "-p") == 0)
+            {
+                if (nargs < 3)
+                {
+                    printf("complete: missing argument\n");
+                }
+                else
+                {
+                    int found = 0;
+
+                    for (int i = 0; i < completion_count; i++)
+                    {
+                        if (strcmp(completions[i].command, args[2]) == 0)
+                        {
+                            printf("complete -C '%s' %s\n",
+                                   completions[i].script,
+                                   completions[i].command);
+
+                            found = 1;
+                            break;
+                        }
+                    }
+
+                    if (!found)
+                        printf("complete: %s: no completion specification\n",
+                               args[2]);
+                }
+            }
+
+            else if (nargs >= 3 && strcmp(args[1], "-r") == 0)
+            {
+                char *target = args[2];
+
+                for (int i = 0; i < completion_count; i++)
+                {
+                    if (strcmp(completions[i].command, target) == 0)
+                    {
+                        free(completions[i].command);
+                        free(completions[i].script);
+
+                        for (int j = i;
+                             j < completion_count - 1;
+                             j++)
+                        {
+                            completions[j] = completions[j + 1];
+                        }
+
+                        completion_count--;
+
+                        break;
+                    }
+                }
+            }
+
+            else if (nargs >= 4 && strcmp(args[1], "-C") == 0)
+            {
+                int found = 0;
+
+                for (int i = 0; i < completion_count; i++)
+                {
+                    if (strcmp(completions[i].command, args[3]) == 0)
+                    {
+                        free(completions[i].script);
+
+                        completions[i].script = strdup(args[2]);
+
+                        found = 1;
+
+                        break;
+                    }
+                }
+
+                if (!found && completion_count < MAX_COMPLETIONS)
+                {
+                    completions[completion_count].command =
+                        strdup(args[3]);
+
+                    completions[completion_count].script =
+                        strdup(args[2]);
+
+                    completion_count++;
+                }
+            }
+        }
+
+        else if (strcmp(builtin, "jobs") == 0)
+        {
+            for (int i = 0; i < jobs_count; i++)
+            {
+                int wstatus = 0;
+
+                pid_t result = waitpid(
+                    jobs_list[i].pid,
+                    &wstatus,
+                    WNOHANG
+                );
+
+                if (result > 0 && WIFEXITED(wstatus))
+                {
+                    free(jobs_list[i].status);
+                    jobs_list[i].status = strdup("Done");
+                }
+            }
+
+            char markers[MAX_JOBS];
+
+            get_markers(markers);
+
+            for (int i = 0; i < jobs_count; i++)
+            {
+                int is_done =
+                    strcmp(jobs_list[i].status, "Done") == 0;
+
+                if (is_done)
+                {
+                    printf("[%d]%c  %-24s%s\n",
+                           jobs_list[i].job_num,
+                           markers[i],
+                           jobs_list[i].status,
+                           jobs_list[i].cmd);
+                }
+                else
+                {
+                    printf("[%d]%c  %-24s%s &\n",
+                           jobs_list[i].job_num,
+                           markers[i],
+                           jobs_list[i].status,
+                           jobs_list[i].cmd);
+                }
+            }
+
+            int new_count = 0;
+
+            for (int i = 0; i < jobs_count; i++)
+            {
+                if (strcmp(jobs_list[i].status, "Done") == 0)
+                {
+                    free(jobs_list[i].cmd);
+                    free(jobs_list[i].status);
+                }
+                else
+                {
+                    jobs_list[new_count++] = jobs_list[i];
+                }
+            }
+
+            jobs_count = new_count;
+        }
+
+        else if (strcmp(builtin, "type") == 0)
+        {
+            if (nargs < 2)
+            {
+                printf("type: missing argument\n");
+            }
+            else
+            {
+                char *name = args[1];
+
+                if (!strcmp(name, "exit") ||
+                    !strcmp(name, "echo") ||
+                    !strcmp(name, "type") ||
+                    !strcmp(name, "pwd")  ||
+                    !strcmp(name, "cd")   ||
+                    !strcmp(name, "complete") ||
+                    !strcmp(name, "jobs"))
+                {
+                    printf("%s is a shell builtin\n", name);
+                }
+                else
+                {
+                    char *full_path = find_in_path(name);
+
+                    if (full_path != NULL)
+                    {
+                        printf("%s is %s\n",
+                               name,
+                               full_path);
+
+                        free(full_path);
+                    }
+                    else
+                    {
+                        printf("%s: not found\n", name);
+                    }
+                }
+            }
         }
 
         else
@@ -511,15 +1042,68 @@ int main(int argc, char *argv[])
                     execv(full_path, args);
 
                     perror("execv");
+
                     exit(1);
                 }
+
+                else if (pid > 0)
+                {
+                    if (is_background)
+                    {
+                        int new_job_num = next_job_num();
+
+                        char cmd_str[1024] = "";
+
+                        for (int i = 0; i < nargs; i++)
+                        {
+                            if (i > 0)
+                                strcat(cmd_str, " ");
+
+                            strcat(cmd_str, args[i]);
+                        }
+
+                        jobs_list[jobs_count].job_num =
+                            new_job_num;
+
+                        jobs_list[jobs_count].pid =
+                            pid;
+
+                        jobs_list[jobs_count].cmd =
+                            strdup(cmd_str);
+
+                        jobs_list[jobs_count].status =
+                            strdup("Running");
+
+                        jobs_count++;
+
+                        printf("[%d] %d\n",
+                               new_job_num,
+                               pid);
+                    }
+                    else
+                    {
+                        waitpid(pid, NULL, 0);
+                    }
+                }
+
                 else
                 {
-                    waitpid(pid, NULL, 0);
+                    perror("fork");
                 }
 
                 free(full_path);
             }
+        }
+
+        if (outfile != NULL)
+        {
+            fflush(stdout);
+
+            dup2(saved_fd, target_fd);
+
+            close(saved_fd);
+
+            free(outfile);
         }
 
         free_args(args, nargs);
