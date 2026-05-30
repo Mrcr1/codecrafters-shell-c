@@ -168,7 +168,26 @@ typedef struct
 
 Job jobs_list[MAX_JOBS];
 int jobs_count = 0;
-int job_counter = 0;
+
+// Find the smallest available job number
+int next_job_num(void)
+{
+    int candidate = 1;
+    while (1)
+    {
+        int taken = 0;
+        for (int i = 0; i < jobs_count; i++)
+        {
+            if (jobs_list[i].job_num == candidate)
+            {
+                taken = 1;
+                break;
+            }
+        }
+        if (!taken) return candidate;
+        candidate++;
+    }
+}
 
 // Compute markers based on job_num
 void get_markers(char *markers)
@@ -200,7 +219,6 @@ void get_markers(char *markers)
 
 void reap_jobs(int print_done)
 {
-    // Step 1 — check each job for exit
     for (int i = 0; i < jobs_count; i++)
     {
         int wstatus = 0;
@@ -212,7 +230,6 @@ void reap_jobs(int print_done)
         }
     }
 
-    // Step 2 — print Done jobs if requested
     if (print_done)
     {
         char markers[MAX_JOBS];
@@ -231,7 +248,6 @@ void reap_jobs(int print_done)
         }
     }
 
-    // Step 3 — remove Done jobs
     int new_count = 0;
     for (int i = 0; i < jobs_count; i++)
     {
@@ -475,7 +491,6 @@ int main(int argc, char *argv[])
 
     while (1)
     {
-        // Auto-reap before each prompt — print Done lines
         reap_jobs(1);
 
         char *command = readline("$ ");
@@ -493,7 +508,6 @@ int main(int argc, char *argv[])
 
         if (nargs == 0) continue;
 
-        // Check for background operator &
         int is_background = 0;
         if (nargs > 0 && strcmp(args[nargs - 1], "&") == 0)
         {
@@ -647,10 +661,8 @@ int main(int argc, char *argv[])
             }
         }
 
-        // jobs builtin:
         else if (strcmp(builtin, "jobs") == 0)
         {
-            // Check exits without removing yet
             for (int i = 0; i < jobs_count; i++)
             {
                 int wstatus = 0;
@@ -662,11 +674,9 @@ int main(int argc, char *argv[])
                 }
             }
 
-            // Compute markers BEFORE removing Done jobs
             char markers[MAX_JOBS];
             get_markers(markers);
 
-            // Print all jobs
             for (int i = 0; i < jobs_count; i++)
             {
                 int is_done = strcmp(jobs_list[i].status, "Done") == 0;
@@ -685,7 +695,6 @@ int main(int argc, char *argv[])
                         jobs_list[i].cmd);
             }
 
-            // Remove Done jobs after printing
             int new_count = 0;
             for (int i = 0; i < jobs_count; i++)
             {
@@ -756,7 +765,7 @@ int main(int argc, char *argv[])
                 {
                     if (is_background)
                     {
-                        job_counter++;
+                        int new_job_num = next_job_num();
 
                         char cmd_str[1024] = "";
                         for (int i = 0; i < nargs; i++)
@@ -765,13 +774,13 @@ int main(int argc, char *argv[])
                             strcat(cmd_str, args[i]);
                         }
 
-                        jobs_list[jobs_count].job_num = job_counter;
+                        jobs_list[jobs_count].job_num = new_job_num;
                         jobs_list[jobs_count].pid     = pid;
                         jobs_list[jobs_count].cmd     = strdup(cmd_str);
                         jobs_list[jobs_count].status  = strdup("Running");
                         jobs_count++;
 
-                        printf("[%d] %d\n", job_counter, pid);
+                        printf("[%d] %d\n", new_job_num, pid);
                     }
                     else
                     {
