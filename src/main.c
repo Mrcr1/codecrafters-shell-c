@@ -145,9 +145,7 @@ char *extract_redirect(char **args, int *nargs, int *is_stderr, int *is_append)
 
 // Support code for complete builtin
 #define MAX_COMPLETIONS 256
-
-typedef struct
-{
+typedef struct {
     char *command;
     char *script;
 } Completion;
@@ -157,74 +155,16 @@ int completion_count = 0;
 
 // Background job tracking
 #define MAX_JOBS 256
-
-typedef struct
-{
-    int    job_num;
-    pid_t  pid;
-    char  *cmd;
-    char  *status;
+typedef struct {
+    int job_num;
+    pid_t pid;
+    char *cmd;
+    char *status; // "Running" or "Done"
 } Job;
 
 Job jobs_list[MAX_JOBS];
 int jobs_count = 0;
 int job_counter = 0;
-
-// Reap completed jobs — shared by both auto-reap and jobs builtin
-void reap_jobs(int print_done)
-{
-    // Step 1 — check each job for exit
-    for (int i = 0; i < jobs_count; i++)
-    {
-        int wstatus = 0;
-        pid_t result = waitpid(jobs_list[i].pid, &wstatus, WNOHANG);
-        if (result > 0 && WIFEXITED(wstatus))
-        {
-            free(jobs_list[i].status);
-            jobs_list[i].status = strdup("Done");
-        }
-    }
-
-    // Step 2 — print Done jobs if requested
-    if (print_done)
-    {
-        for (int i = 0; i < jobs_count; i++)
-        {
-            if (strcmp(jobs_list[i].status, "Done") == 0)
-            {
-                char marker;
-                if (i == jobs_count - 1)
-                    marker = '+';
-                else if (i == jobs_count - 2)
-                    marker = '-';
-                else
-                    marker = ' ';
-
-                printf("[%d]%c  %-24s%s\n",
-                    jobs_list[i].job_num,
-                    marker,
-                    jobs_list[i].status,
-                    jobs_list[i].cmd);
-            }
-        }
-    }
-
-    // Step 3 — remove Done jobs
-    int new_count = 0;
-    for (int i = 0; i < jobs_count; i++)
-    {
-        if (strcmp(jobs_list[i].status, "Done") == 0)
-        {
-            free(jobs_list[i].cmd);
-            free(jobs_list[i].status);
-        }
-        else
-        {
-            jobs_list[new_count++] = jobs_list[i];
-        }
-    }
-    jobs_count = new_count;
-}
 
 // Builtins for TAB completion
 char *builtin_list[] = {"echo", "exit", "type", "pwd", "cd", "complete", "jobs", NULL};
@@ -299,13 +239,11 @@ char *builtin_generator(const char *text, int state)
             }
             free(path_copy);
         }
-
         matches[match_count] = NULL;
     }
 
     if (index < match_count)
         return strdup(matches[index++]);
-
     return NULL;
 }
 
@@ -322,7 +260,6 @@ char **run_completer_multi(const char *script, const char *cmd, const char *word
         close(pipefd[1]);
 
         setenv("COMP_LINE", comp_line, 1);
-
         char comp_point_str[32];
         snprintf(comp_point_str, sizeof(comp_point_str), "%d", comp_point);
         setenv("COMP_POINT", comp_point_str, 1);
@@ -339,12 +276,10 @@ char **run_completer_multi(const char *script, const char *cmd, const char *word
     close(pipefd[0]);
 
     if (n <= 0) return NULL;
-
     buf[n] = '\0';
 
     char **results = malloc(sizeof(char *) * 256);
     int count = 0;
-
     char *line = strtok(buf, "\n");
     while (line != NULL && count < 255)
     {
@@ -362,12 +297,9 @@ static int completer_results_index = 0;
 char *completer_results_generator(const char *text, int state)
 {
     (void)text;
-    if (state == 0)
-        completer_results_index = 0;
-
+    if (state == 0) completer_results_index = 0;
     if (completer_results != NULL && completer_results[completer_results_index] != NULL)
         return strdup(completer_results[completer_results_index++]);
-
     return NULL;
 }
 
@@ -391,6 +323,7 @@ int compare_strings(const void *a, const void *b)
 char **shell_completion(const char *text, int start, int end)
 {
     (void)end;
+
     if (start == 0)
     {
         rl_attempted_completion_over = 1;
@@ -412,22 +345,21 @@ char **shell_completion(const char *text, int start, int end)
 
     if (ntokens == 0) return NULL;
 
-    char *cmd  = tokens[0];
+    char *cmd = tokens[0];
     char *word = (char *)text;
     char *prev = ntokens >= 2 ? tokens[ntokens - 2] : "";
-
     if (ntokens == 1) prev = "";
 
-    const char *comp_line  = rl_line_buffer;
-    int          comp_point = rl_point;
+    const char *comp_line = rl_line_buffer;
+    int comp_point = rl_point;
 
     for (int i = 0; i < completion_count; i++)
     {
         if (strcmp(completions[i].command, cmd) == 0)
         {
             free_completer_results();
-
             completer_results = run_completer_multi(completions[i].script, cmd, word, prev, comp_line, comp_point);
+
             if (completer_results == NULL) return NULL;
 
             int count = 0;
@@ -441,21 +373,16 @@ char **shell_completion(const char *text, int start, int end)
             return rl_completion_matches(text, completer_results_generator);
         }
     }
-
     return NULL;
 }
 
 int main(int argc, char *argv[])
 {
     setbuf(stdout, NULL);
-
     rl_attempted_completion_function = shell_completion;
 
     while (1)
     {
-        // Auto-reap before each prompt — print Done lines
-        reap_jobs(1);
-
         char *command = readline("$ ");
         if (command == NULL) break;
 
@@ -488,7 +415,6 @@ int main(int argc, char *argv[])
         }
 
         char *builtin = args[0];
-
         int is_stderr = 0;
         int is_append = 0;
         char *outfile = extract_redirect(args, &nargs, &is_stderr, &is_append);
@@ -514,11 +440,15 @@ int main(int argc, char *argv[])
 
         if (strcmp(builtin, "exit") == 0)
         {
-            if (outfile) { dup2(saved_fd, target_fd); close(saved_fd); free(outfile); }
+            if (outfile)
+            {
+                dup2(saved_fd, target_fd);
+                close(saved_fd);
+                free(outfile);
+            }
             free_args(args, nargs);
             break;
         }
-
         else if (strcmp(builtin, "echo") == 0)
         {
             for (int i = 1; i < nargs; i++)
@@ -528,7 +458,6 @@ int main(int argc, char *argv[])
             }
             printf("\n");
         }
-
         else if (strcmp(builtin, "pwd") == 0)
         {
             char cwd[1024];
@@ -537,7 +466,6 @@ int main(int argc, char *argv[])
             else
                 perror("pwd");
         }
-
         else if (strcmp(builtin, "cd") == 0)
         {
             if (nargs < 2)
@@ -553,7 +481,12 @@ int main(int argc, char *argv[])
                     if (path == NULL)
                     {
                         printf("cd: HOME not set\n");
-                        if (outfile) { dup2(saved_fd, target_fd); close(saved_fd); free(outfile); }
+                        if (outfile)
+                        {
+                            dup2(saved_fd, target_fd);
+                            close(saved_fd);
+                            free(outfile);
+                        }
                         free_args(args, nargs);
                         continue;
                     }
@@ -562,7 +495,6 @@ int main(int argc, char *argv[])
                     printf("cd: %s: No such file or directory\n", args[1]);
             }
         }
-
         else if (strcmp(builtin, "complete") == 0)
         {
             if (nargs >= 2 && strcmp(args[1], "-p") == 0)
@@ -619,46 +551,57 @@ int main(int argc, char *argv[])
                 if (!found && completion_count < MAX_COMPLETIONS)
                 {
                     completions[completion_count].command = strdup(args[3]);
-                    completions[completion_count].script  = strdup(args[2]);
+                    completions[completion_count].script = strdup(args[2]);
                     completion_count++;
                 }
             }
         }
-
         // jobs builtin:
         else if (strcmp(builtin, "jobs") == 0)
         {
-            // Reap first — don't print Done here, just update status
-            reap_jobs(0);
-
-            // Print all remaining jobs with markers
+            // Step 1 — check each job for exit using WNOHANG
             for (int i = 0; i < jobs_count; i++)
             {
-                char marker;
-                if (i == jobs_count - 1)
-                    marker = '+';
-                else if (i == jobs_count - 2)
-                    marker = '-';
-                else
-                    marker = ' ';
-
-                int is_done = strcmp(jobs_list[i].status, "Done") == 0;
-
-                if (is_done)
-                    printf("[%d]%c  %-24s%s\n",
-                        jobs_list[i].job_num,
-                        marker,
-                        jobs_list[i].status,
-                        jobs_list[i].cmd);
-                else
-                    printf("[%d]%c  %-24s%s &\n",
-                        jobs_list[i].job_num,
-                        marker,
-                        jobs_list[i].status,
-                        jobs_list[i].cmd);
+                int wstatus = 0;
+                pid_t result = waitpid(jobs_list[i].pid, &wstatus, WNOHANG);
+                if (result > 0 && WIFEXITED(wstatus))
+                {
+                    free(jobs_list[i].status);
+                    jobs_list[i].status = strdup("Done");
+                }
             }
 
-            // Remove Done jobs after printing
+            // Step 2 — determine the + and - markers based on highest job_num
+            int max_job_num = -1;
+            int second_max_job_num = -1;
+            
+            for (int i = 0; i < jobs_count; i++) {
+                if (jobs_list[i].job_num > max_job_num) {
+                    second_max_job_num = max_job_num;
+                    max_job_num = jobs_list[i].job_num;
+                } else if (jobs_list[i].job_num > second_max_job_num) {
+                    second_max_job_num = jobs_list[i].job_num;
+                }
+            }
+
+            // Print all jobs with the correct markers
+            for (int i = 0; i < jobs_count; i++) {
+                char marker = ' ';
+                if (jobs_list[i].job_num == max_job_num) {
+                    marker = '+';
+                } else if (jobs_list[i].job_num == second_max_job_num) {
+                    marker = '-';
+                }
+
+                int is_done = strcmp(jobs_list[i].status, "Done") == 0;
+                if (is_done) {
+                    printf("[%d]%c %-24s%s\n", jobs_list[i].job_num, marker, jobs_list[i].status, jobs_list[i].cmd);
+                } else {
+                    printf("[%d]%c %-24s%s &\n", jobs_list[i].job_num, marker, jobs_list[i].status, jobs_list[i].cmd);
+                }
+            }
+
+            // Step 3 — remove Done jobs from the list
             int new_count = 0;
             for (int i = 0; i < jobs_count; i++)
             {
@@ -674,7 +617,6 @@ int main(int argc, char *argv[])
             }
             jobs_count = new_count;
         }
-
         else if (strcmp(builtin, "type") == 0)
         {
             if (nargs < 2)
@@ -684,9 +626,8 @@ int main(int argc, char *argv[])
             else
             {
                 char *name = args[1];
-                if (!strcmp(name, "exit") || !strcmp(name, "echo") ||
-                    !strcmp(name, "type") || !strcmp(name, "pwd") ||
-                    !strcmp(name, "cd")   || !strcmp(name, "complete") ||
+                if (!strcmp(name, "exit") || !strcmp(name, "echo") || !strcmp(name, "type") ||
+                    !strcmp(name, "pwd") || !strcmp(name, "cd") || !strcmp(name, "complete") ||
                     !strcmp(name, "jobs"))
                 {
                     printf("%s is a shell builtin\n", name);
@@ -706,11 +647,9 @@ int main(int argc, char *argv[])
                 }
             }
         }
-
         else
         {
             char *full_path = find_in_path(builtin);
-
             if (full_path == NULL)
             {
                 printf("%s: command not found\n", builtin);
@@ -718,7 +657,6 @@ int main(int argc, char *argv[])
             else
             {
                 pid_t pid = fork();
-
                 if (pid == 0)
                 {
                     execv(full_path, args);
@@ -730,20 +668,17 @@ int main(int argc, char *argv[])
                     if (is_background)
                     {
                         job_counter++;
-
                         char cmd_str[1024] = "";
                         for (int i = 0; i < nargs; i++)
                         {
                             if (i > 0) strcat(cmd_str, " ");
                             strcat(cmd_str, args[i]);
                         }
-
                         jobs_list[jobs_count].job_num = job_counter;
-                        jobs_list[jobs_count].pid     = pid;
-                        jobs_list[jobs_count].cmd     = strdup(cmd_str);
-                        jobs_list[jobs_count].status  = strdup("Running");
+                        jobs_list[jobs_count].pid = pid;
+                        jobs_list[jobs_count].cmd = strdup(cmd_str);
+                        jobs_list[jobs_count].status = strdup("Running");
                         jobs_count++;
-
                         printf("[%d] %d\n", job_counter, pid);
                     }
                     else
@@ -755,7 +690,6 @@ int main(int argc, char *argv[])
                 {
                     perror("fork");
                 }
-
                 free(full_path);
             }
         }
@@ -767,7 +701,6 @@ int main(int argc, char *argv[])
             close(saved_fd);
             free(outfile);
         }
-
         free_args(args, nargs);
     }
 
