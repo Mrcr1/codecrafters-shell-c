@@ -264,7 +264,6 @@ void reap_jobs(int print_done)
     jobs_count = new_count;
 }
 
-// Execute a two-command pipeline: cmd1 | cmd2
 void run_pipeline(char **args1, int nargs1, char **args2, int nargs2)
 {
     int pipefd[2];
@@ -278,10 +277,21 @@ void run_pipeline(char **args1, int nargs1, char **args2, int nargs2)
     pid_t pid1 = fork();
     if (pid1 == 0)
     {
-        // Child 1: write to pipe
         close(pipefd[0]);
         dup2(pipefd[1], STDOUT_FILENO);
         close(pipefd[1]);
+
+        // Left side — try builtin first, then external
+        if (strcmp(args1[0], "echo") == 0)
+        {
+            for (int i = 1; i < nargs1; i++)
+            {
+                if (i > 1) printf(" ");
+                printf("%s", args1[i]);
+            }
+            printf("\n");
+            exit(0);
+        }
 
         char *path = find_in_path(args1[0]);
         if (path == NULL)
@@ -298,11 +308,53 @@ void run_pipeline(char **args1, int nargs1, char **args2, int nargs2)
     pid_t pid2 = fork();
     if (pid2 == 0)
     {
-        // Child 2: read from pipe
         close(pipefd[1]);
         dup2(pipefd[0], STDIN_FILENO);
         close(pipefd[0]);
 
+        // Right side — handle builtins
+        if (strcmp(args2[0], "echo") == 0)
+        {
+            for (int i = 1; i < nargs2; i++)
+            {
+                if (i > 1) printf(" ");
+                printf("%s", args2[i]);
+            }
+            printf("\n");
+            exit(0);
+        }
+        else if (strcmp(args2[0], "type") == 0)
+        {
+            if (nargs2 >= 2)
+            {
+                char *name = args2[1];
+                if (!strcmp(name, "exit") || !strcmp(name, "echo") ||
+                    !strcmp(name, "type") || !strcmp(name, "pwd")  ||
+                    !strcmp(name, "cd")   || !strcmp(name, "complete") ||
+                    !strcmp(name, "jobs"))
+                {
+                    printf("%s is a shell builtin\n", name);
+                }
+                else
+                {
+                    char *full_path = find_in_path(name);
+                    if (full_path != NULL)
+                        printf("%s is %s\n", name, full_path);
+                    else
+                        printf("%s: not found\n", name);
+                }
+            }
+            exit(0);
+        }
+        else if (strcmp(args2[0], "pwd") == 0)
+        {
+            char cwd[1024];
+            if (getcwd(cwd, sizeof(cwd)) != NULL)
+                printf("%s\n", cwd);
+            exit(0);
+        }
+
+        // External command
         char *path = find_in_path(args2[0]);
         if (path == NULL)
         {
@@ -314,7 +366,6 @@ void run_pipeline(char **args1, int nargs1, char **args2, int nargs2)
         exit(1);
     }
 
-    // Parent: close both pipe ends and wait
     close(pipefd[0]);
     close(pipefd[1]);
     waitpid(pid1, NULL, 0);
