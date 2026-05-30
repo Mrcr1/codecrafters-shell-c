@@ -650,14 +650,23 @@ int main(int argc, char *argv[])
         // jobs builtin:
         else if (strcmp(builtin, "jobs") == 0)
         {
-            // Reap first — don't print Done here
-            reap_jobs(0);
+            // Check exits without removing yet
+            for (int i = 0; i < jobs_count; i++)
+            {
+                int wstatus = 0;
+                pid_t result = waitpid(jobs_list[i].pid, &wstatus, WNOHANG);
+                if (result > 0 && WIFEXITED(wstatus))
+                {
+                    free(jobs_list[i].status);
+                    jobs_list[i].status = strdup("Done");
+                }
+            }
 
-            // Compute markers based on job_num
+            // Compute markers BEFORE removing Done jobs
             char markers[MAX_JOBS];
             get_markers(markers);
 
-            // Print all remaining jobs
+            // Print all jobs
             for (int i = 0; i < jobs_count; i++)
             {
                 int is_done = strcmp(jobs_list[i].status, "Done") == 0;
