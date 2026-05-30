@@ -310,7 +310,18 @@ void exec_builtin_in_child(char **args, int nargs)
         HIST_ENTRY **the_list = history_list();
         if (the_list)
         {
-            for (int i = 0; the_list[i] != NULL; i++)
+            int total = 0;
+            while (the_list[total] != NULL) total++;
+
+            int start = 0;
+            if (nargs >= 2)
+            {
+                int n = atoi(args[1]);
+                start = total - n;
+                if (start < 0) start = 0;
+            }
+
+            for (int i = start; i < total; i++)
             {
                 printf("    %d  %s\n", i + 1, the_list[i]->line);
             }
@@ -898,7 +909,18 @@ int main(int argc, char *argv[])
             HIST_ENTRY **the_list = history_list();
             if (the_list)
             {
-                for (int i = 0; the_list[i] != NULL; i++)
+                int total = 0;
+                while (the_list[total] != NULL) total++;
+
+                int start = 0;
+                if (nargs >= 2)
+                {
+                    int n = atoi(args[1]);
+                    start = total - n;
+                    if (start < 0) start = 0;
+                }
+
+                for (int i = start; i < total; i++)
                 {
                     printf("    %d  %s\n", i + 1, the_list[i]->line);
                 }
