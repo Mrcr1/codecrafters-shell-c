@@ -283,7 +283,7 @@ void exec_builtin_in_child(char **args, int nargs)
             if (!strcmp(name, "exit") || !strcmp(name, "echo") ||
                 !strcmp(name, "type") || !strcmp(name, "pwd")  ||
                 !strcmp(name, "cd")   || !strcmp(name, "complete") ||
-                !strcmp(name, "jobs"))
+                !strcmp(name, "jobs") || !strcmp(name, "history"))
             {
                 printf("%s is a shell builtin\n", name);
             }
@@ -305,6 +305,18 @@ void exec_builtin_in_child(char **args, int nargs)
             printf("%s\n", cwd);
         exit(0);
     }
+    else if (strcmp(args[0], "history") == 0)
+    {
+        HIST_ENTRY **the_list = history_list();
+        if (the_list)
+        {
+            for (int i = 0; the_list[i] != NULL; i++)
+            {
+                printf("    %d  %s\n", i + 1, the_list[i]->line);
+            }
+        }
+        exit(0);
+    }
 }
 
 int is_builtin(const char *cmd)
@@ -312,7 +324,7 @@ int is_builtin(const char *cmd)
     return (!strcmp(cmd, "echo") || !strcmp(cmd, "type") ||
             !strcmp(cmd, "pwd")  || !strcmp(cmd, "cd")   ||
             !strcmp(cmd, "exit") || !strcmp(cmd, "complete") ||
-            !strcmp(cmd, "jobs"));
+            !strcmp(cmd, "jobs") || !strcmp(cmd, "history"));
 }
 
 // Execute a multi-stage pipeline
@@ -393,7 +405,7 @@ void run_pipeline(char ***all_args, int *all_nargs, int num_cmds)
 }
 
 // Builtins for TAB completion
-char *builtin_list[] = {"echo", "exit", "type", "pwd", "cd", "complete", "jobs", NULL};
+char *builtin_list[] = {"echo", "exit", "type", "pwd", "cd", "complete", "jobs", "history", NULL};
 char **matches = NULL;
 int match_count = 0;
 
@@ -615,6 +627,7 @@ int main(int argc, char *argv[])
 {
     setbuf(stdout, NULL);
 
+    using_history();
     rl_attempted_completion_function = shell_completion;
 
     while (1)
@@ -629,6 +642,8 @@ int main(int argc, char *argv[])
             free(command);
             continue;
         }
+
+        add_history(command);
 
         // Check for pipe operator
         if (strstr(command, " | ") != NULL)
@@ -878,6 +893,18 @@ int main(int argc, char *argv[])
             jobs_count = new_count;
         }
 
+        else if (strcmp(builtin, "history") == 0)
+        {
+            HIST_ENTRY **the_list = history_list();
+            if (the_list)
+            {
+                for (int i = 0; the_list[i] != NULL; i++)
+                {
+                    printf("    %d  %s\n", i + 1, the_list[i]->line);
+                }
+            }
+        }
+
         else if (strcmp(builtin, "type") == 0)
         {
             if (nargs < 2)
@@ -890,7 +917,7 @@ int main(int argc, char *argv[])
                 if (!strcmp(name, "exit") || !strcmp(name, "echo") ||
                     !strcmp(name, "type") || !strcmp(name, "pwd") ||
                     !strcmp(name, "cd")   || !strcmp(name, "complete") ||
-                    !strcmp(name, "jobs"))
+                    !strcmp(name, "jobs") || !strcmp(name, "history"))
                 {
                     printf("%s is a shell builtin\n", name);
                 }
