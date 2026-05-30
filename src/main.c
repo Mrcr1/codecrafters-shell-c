@@ -169,7 +169,6 @@ typedef struct
 Job jobs_list[MAX_JOBS];
 int jobs_count = 0;
 
-// Find the smallest available job number
 int next_job_num(void)
 {
     int candidate = 1;
@@ -189,7 +188,6 @@ int next_job_num(void)
     }
 }
 
-// Compute markers based on job_num
 void get_markers(char *markers)
 {
     int max1 = -1, max2 = -1;
@@ -264,112 +262,134 @@ void reap_jobs(int print_done)
     jobs_count = new_count;
 }
 
-void run_pipeline(char **args1, int nargs1, char **args2, int nargs2)
+// Execute a builtin in a child process (for use inside pipelines)
+void exec_builtin_in_child(char **args, int nargs)
 {
-    int pipefd[2];
-    if (pipe(pipefd) < 0)
+    if (strcmp(args[0], "echo") == 0)
     {
-        perror("pipe");
-        return;
+        for (int i = 1; i < nargs; i++)
+        {
+            if (i > 1) printf(" ");
+            printf("%s", args[i]);
+        }
+        printf("\n");
+        exit(0);
     }
-
-    // Fork left command
-    pid_t pid1 = fork();
-    if (pid1 == 0)
+    else if (strcmp(args[0], "type") == 0)
     {
-        close(pipefd[0]);
-        dup2(pipefd[1], STDOUT_FILENO);
-        close(pipefd[1]);
-
-        // Left side — try builtin first, then external
-        if (strcmp(args1[0], "echo") == 0)
+        if (nargs >= 2)
         {
-            for (int i = 1; i < nargs1; i++)
+            char *name = args[1];
+            if (!strcmp(name, "exit") || !strcmp(name, "echo") ||
+                !strcmp(name, "type") || !strcmp(name, "pwd")  ||
+                !strcmp(name, "cd")   || !strcmp(name, "complete") ||
+                !strcmp(name, "jobs"))
             {
-                if (i > 1) printf(" ");
-                printf("%s", args1[i]);
+                printf("%s is a shell builtin\n", name);
             }
-            printf("\n");
-            exit(0);
-        }
-
-        char *path = find_in_path(args1[0]);
-        if (path == NULL)
-        {
-            fprintf(stderr, "%s: command not found\n", args1[0]);
-            exit(1);
-        }
-        execv(path, args1);
-        perror("execv");
-        exit(1);
-    }
-
-    // Fork right command
-    pid_t pid2 = fork();
-    if (pid2 == 0)
-    {
-        close(pipefd[1]);
-        dup2(pipefd[0], STDIN_FILENO);
-        close(pipefd[0]);
-
-        // Right side — handle builtins
-        if (strcmp(args2[0], "echo") == 0)
-        {
-            for (int i = 1; i < nargs2; i++)
+            else
             {
-                if (i > 1) printf(" ");
-                printf("%s", args2[i]);
-            }
-            printf("\n");
-            exit(0);
-        }
-        else if (strcmp(args2[0], "type") == 0)
-        {
-            if (nargs2 >= 2)
-            {
-                char *name = args2[1];
-                if (!strcmp(name, "exit") || !strcmp(name, "echo") ||
-                    !strcmp(name, "type") || !strcmp(name, "pwd")  ||
-                    !strcmp(name, "cd")   || !strcmp(name, "complete") ||
-                    !strcmp(name, "jobs"))
-                {
-                    printf("%s is a shell builtin\n", name);
-                }
+                char *full_path = find_in_path(name);
+                if (full_path != NULL)
+                    printf("%s is %s\n", name, full_path);
                 else
-                {
-                    char *full_path = find_in_path(name);
-                    if (full_path != NULL)
-                        printf("%s is %s\n", name, full_path);
-                    else
-                        printf("%s: not found\n", name);
-                }
+                    printf("%s: not found\n", name);
             }
-            exit(0);
         }
-        else if (strcmp(args2[0], "pwd") == 0)
-        {
-            char cwd[1024];
-            if (getcwd(cwd, sizeof(cwd)) != NULL)
-                printf("%s\n", cwd);
-            exit(0);
-        }
+        exit(0);
+    }
+    else if (strcmp(args[0], "pwd") == 0)
+    {
+        char cwd[1024];
+        if (getcwd(cwd, sizeof(cwd)) != NULL)
+            printf("%s\n", cwd);
+        exit(0);
+    }
+}
 
-        // External command
-        char *path = find_in_path(args2[0]);
-        if (path == NULL)
+int is_builtin(const char *cmd)
+{
+    return (!strcmp(cmd, "echo") || !strcmp(cmd, "type") ||
+            !strcmp(cmd, "pwd")  || !strcmp(cmd, "cd")   ||
+            !strcmp(cmd, "exit") || !strcmp(cmd, "complete") ||
+            !strcmp(cmd, "jobs"));
+}
+
+// Execute a multi-stage pipeline
+void run_pipeline(char ***all_args, int *all_nargs, int num_cmds)
+{
+    int pipes[num_cmds - 1][2];
+
+    // Create all pipes
+    for (int i = 0; i < num_cmds - 1; i++)
+    {
+        if (pipe(pipes[i]) < 0)
         {
-            fprintf(stderr, "%s: command not found\n", args2[0]);
-            exit(1);
+            perror("pipe");
+            return;
         }
-        execv(path, args2);
-        perror("execv");
-        exit(1);
     }
 
-    close(pipefd[0]);
-    close(pipefd[1]);
-    waitpid(pid1, NULL, 0);
-    waitpid(pid2, NULL, 0);
+    pid_t pids[num_cmds];
+
+    for (int i = 0; i < num_cmds; i++)
+    {
+        pids[i] = fork();
+
+        if (pids[i] == 0)
+        {
+            // Set up stdin from previous pipe
+            if (i > 0)
+            {
+                dup2(pipes[i - 1][0], STDIN_FILENO);
+            }
+
+            // Set up stdout to next pipe
+            if (i < num_cmds - 1)
+            {
+                dup2(pipes[i][1], STDOUT_FILENO);
+            }
+
+            // Close all pipe fds in child
+            for (int j = 0; j < num_cmds - 1; j++)
+            {
+                close(pipes[j][0]);
+                close(pipes[j][1]);
+            }
+
+            char **args = all_args[i];
+            int nargs   = all_nargs[i];
+
+            // Try builtin first
+            if (is_builtin(args[0]))
+            {
+                exec_builtin_in_child(args, nargs);
+                exit(0);
+            }
+
+            // External command
+            char *path = find_in_path(args[0]);
+            if (path == NULL)
+            {
+                fprintf(stderr, "%s: command not found\n", args[0]);
+                exit(1);
+            }
+            execv(path, args);
+            perror("execv");
+            exit(1);
+        }
+    }
+
+    // Parent: close all pipe fds
+    for (int i = 0; i < num_cmds - 1; i++)
+    {
+        close(pipes[i][0]);
+        close(pipes[i][1]);
+    }
+
+    // Wait for all children
+    for (int i = 0; i < num_cmds; i++)
+        waitpid(pids[i], NULL, 0);
 }
 
 // Builtins for TAB completion
@@ -611,24 +631,40 @@ int main(int argc, char *argv[])
         }
 
         // Check for pipe operator
-        char *pipe_pos = strstr(command, " | ");
-        if (pipe_pos != NULL)
+        if (strstr(command, " | ") != NULL)
         {
-            // Split into two halves at the pipe
-            *pipe_pos = '\0';
-            char *left  = command;
-            char *right = pipe_pos + 3;
+            // Split command into segments by " | "
+            char *segments[64];
+            int num_cmds = 0;
 
-            char *args1[1024];
-            char *args2[1024];
-            int nargs1 = parse_args(left,  args1, 1024);
-            int nargs2 = parse_args(right, args2, 1024);
+            char *cmd_copy = strdup(command);
+            char *seg = strtok(cmd_copy, "|");
+            while (seg != NULL && num_cmds < 64)
+            {
+                // Trim leading/trailing spaces
+                while (*seg == ' ') seg++;
+                char *end = seg + strlen(seg) - 1;
+                while (end > seg && *end == ' ') *end-- = '\0';
+                segments[num_cmds++] = seg;
+                seg = strtok(NULL, "|");
+            }
 
-            if (nargs1 > 0 && nargs2 > 0)
-                run_pipeline(args1, nargs1, args2, nargs2);
+            char  *all_args_storage[64][1024];
+            int    all_nargs[64];
+            char **all_args[64];
 
-            free_args(args1, nargs1);
-            free_args(args2, nargs2);
+            for (int i = 0; i < num_cmds; i++)
+            {
+                all_args[i] = all_args_storage[i];
+                all_nargs[i] = parse_args(segments[i], all_args[i], 1024);
+            }
+
+            run_pipeline(all_args, all_nargs, num_cmds);
+
+            for (int i = 0; i < num_cmds; i++)
+                free_args(all_args[i], all_nargs[i]);
+
+            free(cmd_copy);
             free(command);
             continue;
         }
