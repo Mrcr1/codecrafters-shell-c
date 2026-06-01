@@ -1088,7 +1088,7 @@ int main(int argc, char *argv[])
                     !strcmp(name, "jobs") || !strcmp(name, "history") ||
                     !strcmp(name, "declare"))
                 {
-                    printf("declare is a shell builtin\n", name);
+                    printf("%s is a shell builtin\n", name);
                 }
                 else
                 {
