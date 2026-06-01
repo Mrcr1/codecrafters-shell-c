@@ -169,6 +169,9 @@ typedef struct
 Job jobs_list[MAX_JOBS];
 int jobs_count = 0;
 
+// History state tracking
+static int history_appended = 0;
+
 int next_job_num(void)
 {
     int candidate = 1;
@@ -310,12 +313,54 @@ void exec_builtin_in_child(char **args, int nargs)
         if (nargs >= 2 && strcmp(args[1], "-r") == 0)
         {
             if (nargs >= 3)
+            {
+                HIST_ENTRY **the_list = history_list();
+                int total = 0;
+                if (the_list) while (the_list[total] != NULL) total++;
+                
                 read_history(args[2]);
+                
+                int new_total = 0;
+                the_list = history_list();
+                if (the_list) while (the_list[new_total] != NULL) new_total++;
+                
+                history_appended += (new_total - total);
+            }
         }
         else if (nargs >= 2 && strcmp(args[1], "-w") == 0)
         {
             if (nargs >= 3)
+            {
                 write_history(args[2]);
+                HIST_ENTRY **the_list = history_list();
+                int total = 0;
+                if (the_list) while (the_list[total] != NULL) total++;
+                history_appended = total;
+            }
+        }
+        else if (nargs >= 2 && strcmp(args[1], "-a") == 0)
+        {
+            if (nargs >= 3)
+            {
+                HIST_ENTRY **the_list = history_list();
+                int total = 0;
+                if (the_list) while (the_list[total] != NULL) total++;
+                
+                int new_cmds = total - history_appended;
+                if (new_cmds > 0)
+                {
+                    FILE *f = fopen(args[2], "a");
+                    if (f)
+                    {
+                        for (int i = history_appended; i < total; i++)
+                        {
+                            fprintf(f, "%s\n", the_list[i]->line);
+                        }
+                        fclose(f);
+                        history_appended = total;
+                    }
+                }
+            }
         }
         else
         {
@@ -922,12 +967,54 @@ int main(int argc, char *argv[])
             if (nargs >= 2 && strcmp(args[1], "-r") == 0)
             {
                 if (nargs >= 3)
+                {
+                    HIST_ENTRY **the_list = history_list();
+                    int total = 0;
+                    if (the_list) while (the_list[total] != NULL) total++;
+                    
                     read_history(args[2]);
+                    
+                    int new_total = 0;
+                    the_list = history_list();
+                    if (the_list) while (the_list[new_total] != NULL) new_total++;
+                    
+                    history_appended += (new_total - total);
+                }
             }
             else if (nargs >= 2 && strcmp(args[1], "-w") == 0)
             {
                 if (nargs >= 3)
+                {
                     write_history(args[2]);
+                    HIST_ENTRY **the_list = history_list();
+                    int total = 0;
+                    if (the_list) while (the_list[total] != NULL) total++;
+                    history_appended = total;
+                }
+            }
+            else if (nargs >= 2 && strcmp(args[1], "-a") == 0)
+            {
+                if (nargs >= 3)
+                {
+                    HIST_ENTRY **the_list = history_list();
+                    int total = 0;
+                    if (the_list) while (the_list[total] != NULL) total++;
+                    
+                    int new_cmds = total - history_appended;
+                    if (new_cmds > 0)
+                    {
+                        FILE *f = fopen(args[2], "a");
+                        if (f)
+                        {
+                            for (int i = history_appended; i < total; i++)
+                            {
+                                fprintf(f, "%s\n", the_list[i]->line);
+                            }
+                            fclose(f);
+                            history_appended = total;
+                        }
+                    }
+                }
             }
             else
             {
