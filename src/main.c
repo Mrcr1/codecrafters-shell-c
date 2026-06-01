@@ -108,11 +108,13 @@ int parse_args(char *input, char **args, int max_args)
         if (*p == '\0') break;
 
         int buf_len = 0;
+        int has_quotes = 0; // Track if this argument contained explicit quotes
 
         while (*p != '\0')
         {
             if (*p == '\'')
             {
+                has_quotes = 1;
                 p++;
                 while (*p != '\0' && *p != '\'')
                 {
@@ -123,6 +125,7 @@ int parse_args(char *input, char **args, int max_args)
             }
             else if (*p == '"')
             {
+                has_quotes = 1;
                 p++;
                 while (*p != '\0' && *p != '"')
                 {
@@ -273,7 +276,12 @@ int parse_args(char *input, char **args, int max_args)
         }
 
         buf[buf_len] = '\0';
-        args[argc++] = strdup(buf);
+        
+        // If the expansion yielded an empty string AND wasn't quoted, drop it
+        if (buf_len > 0 || has_quotes)
+        {
+            args[argc++] = strdup(buf);
+        }
     }
 
     args[argc] = NULL;
