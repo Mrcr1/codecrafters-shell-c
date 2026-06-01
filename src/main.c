@@ -307,23 +307,31 @@ void exec_builtin_in_child(char **args, int nargs)
     }
     else if (strcmp(args[0], "history") == 0)
     {
-        HIST_ENTRY **the_list = history_list();
-        if (the_list)
+        if (nargs >= 2 && strcmp(args[1], "-r") == 0)
         {
-            int total = 0;
-            while (the_list[total] != NULL) total++;
-
-            int start = 0;
-            if (nargs >= 2)
+            if (nargs >= 3)
+                read_history(args[2]);
+        }
+        else
+        {
+            HIST_ENTRY **the_list = history_list();
+            if (the_list)
             {
-                int n = atoi(args[1]);
-                start = total - n;
-                if (start < 0) start = 0;
-            }
+                int total = 0;
+                while (the_list[total] != NULL) total++;
 
-            for (int i = start; i < total; i++)
-            {
-                printf("    %d  %s\n", i + 1, the_list[i]->line);
+                int start = 0;
+                if (nargs >= 2)
+                {
+                    int n = atoi(args[1]);
+                    start = total - n;
+                    if (start < 0) start = 0;
+                }
+
+                for (int i = start; i < total; i++)
+                {
+                    printf("    %d  %s\n", i + 1, the_list[i]->line);
+                }
             }
         }
         exit(0);
@@ -906,23 +914,31 @@ int main(int argc, char *argv[])
 
         else if (strcmp(builtin, "history") == 0)
         {
-            HIST_ENTRY **the_list = history_list();
-            if (the_list)
+            if (nargs >= 2 && strcmp(args[1], "-r") == 0)
             {
-                int total = 0;
-                while (the_list[total] != NULL) total++;
-
-                int start = 0;
-                if (nargs >= 2)
+                if (nargs >= 3)
+                    read_history(args[2]);
+            }
+            else
+            {
+                HIST_ENTRY **the_list = history_list();
+                if (the_list)
                 {
-                    int n = atoi(args[1]);
-                    start = total - n;
-                    if (start < 0) start = 0;
-                }
+                    int total = 0;
+                    while (the_list[total] != NULL) total++;
 
-                for (int i = start; i < total; i++)
-                {
-                    printf("    %d  %s\n", i + 1, the_list[i]->line);
+                    int start = 0;
+                    if (nargs >= 2)
+                    {
+                        int n = atoi(args[1]);
+                        start = total - n;
+                        if (start < 0) start = 0;
+                    }
+
+                    for (int i = start; i < total; i++)
+                    {
+                        printf("    %d  %s\n", i + 1, the_list[i]->line);
+                    }
                 }
             }
         }
