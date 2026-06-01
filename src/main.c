@@ -389,7 +389,10 @@ void exec_builtin_in_child(char **args, int nargs)
     }
     else if (strcmp(args[0], "declare") == 0)
     {
-        // Parameter expansion implementation coming in later stages
+        if (nargs >= 3 && strcmp(args[1], "-p") == 0)
+        {
+            printf("declare: %s: not found\n", args[2]);
+        }
         exit(0);
     }
 }
@@ -1064,7 +1067,10 @@ int main(int argc, char *argv[])
 
         else if (strcmp(builtin, "declare") == 0)
         {
-            // Parameter expansion implementation coming in later stages
+            if (nargs >= 3 && strcmp(args[1], "-p") == 0)
+            {
+                printf("declare: %s: not found\n", args[2]);
+            }
         }
 
         else if (strcmp(builtin, "type") == 0)
@@ -1082,7 +1088,7 @@ int main(int argc, char *argv[])
                     !strcmp(name, "jobs") || !strcmp(name, "history") ||
                     !strcmp(name, "declare"))
                 {
-                    printf("%s is a shell builtin\n", name);
+                    printf("declare is a shell builtin\n", name);
                 }
                 else
                 {
