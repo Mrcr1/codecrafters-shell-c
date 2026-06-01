@@ -213,6 +213,26 @@ const char *get_shell_var(const char *name)
     return NULL;
 }
 
+int is_valid_identifier(const char *name)
+{
+    if (name == NULL || *name == '\0') return 0;
+    
+    // First character must be a letter or underscore
+    if (!((*name >= 'a' && *name <= 'z') || (*name >= 'A' && *name <= 'Z') || *name == '_'))
+        return 0;
+        
+    // Subsequent characters can also include digits
+    for (int i = 1; name[i] != '\0'; i++)
+    {
+        if (!((name[i] >= 'a' && name[i] <= 'z') || 
+              (name[i] >= 'A' && name[i] <= 'Z') || 
+              (name[i] >= '0' && name[i] <= '9') || 
+              name[i] == '_'))
+            return 0;
+    }
+    return 1;
+}
+
 int next_job_num(void)
 {
     int candidate = 1;
@@ -446,8 +466,23 @@ void exec_builtin_in_child(char **args, int nargs)
                 if (eq != NULL)
                 {
                     *eq = '\0';
-                    set_shell_var(args[i], eq + 1);
-                    *eq = '='; // Restore just in case
+                    if (is_valid_identifier(args[i]))
+                    {
+                        set_shell_var(args[i], eq + 1);
+                        *eq = '='; // Restore just in case
+                    }
+                    else
+                    {
+                        *eq = '='; // Restore to print correctly
+                        printf("declare: `%s': not a valid identifier\n", args[i]);
+                    }
+                }
+                else
+                {
+                    if (!is_valid_identifier(args[i]))
+                    {
+                        printf("declare: `%s': not a valid identifier\n", args[i]);
+                    }
                 }
             }
         }
@@ -1141,8 +1176,24 @@ int main(int argc, char *argv[])
                     if (eq != NULL)
                     {
                         *eq = '\0';
-                        set_shell_var(args[i], eq + 1);
-                        *eq = '='; // Restore just in case
+                        if (is_valid_identifier(args[i]))
+                        {
+                            set_shell_var(args[i], eq + 1);
+                            *eq = '='; // Restore just in case
+                        }
+                        else
+                        {
+                            *eq = '='; // Restore to print full arg
+                            printf("declare: `%s': not a valid identifier\n", args[i]);
+                        }
+                    }
+                    else
+                    {
+                        // Handles 'declare 67' where there is no equals sign but the var name is invalid
+                        if (!is_valid_identifier(args[i]))
+                        {
+                            printf("declare: `%s': not a valid identifier\n", args[i]);
+                        }
                     }
                 }
             }
