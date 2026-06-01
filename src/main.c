@@ -172,6 +172,47 @@ int jobs_count = 0;
 // History state tracking
 static int history_appended = 0;
 
+// Shell variable tracking
+#define MAX_VARS 256
+
+typedef struct
+{
+    char *name;
+    char *value;
+} ShellVar;
+
+ShellVar shell_vars[MAX_VARS];
+int shell_vars_count = 0;
+
+void set_shell_var(const char *name, const char *value)
+{
+    for (int i = 0; i < shell_vars_count; i++)
+    {
+        if (strcmp(shell_vars[i].name, name) == 0)
+        {
+            free(shell_vars[i].value);
+            shell_vars[i].value = strdup(value);
+            return;
+        }
+    }
+    if (shell_vars_count < MAX_VARS)
+    {
+        shell_vars[shell_vars_count].name = strdup(name);
+        shell_vars[shell_vars_count].value = strdup(value);
+        shell_vars_count++;
+    }
+}
+
+const char *get_shell_var(const char *name)
+{
+    for (int i = 0; i < shell_vars_count; i++)
+    {
+        if (strcmp(shell_vars[i].name, name) == 0)
+            return shell_vars[i].value;
+    }
+    return NULL;
+}
+
 int next_job_num(void)
 {
     int candidate = 1;
@@ -391,7 +432,24 @@ void exec_builtin_in_child(char **args, int nargs)
     {
         if (nargs >= 3 && strcmp(args[1], "-p") == 0)
         {
-            printf("declare: %s: not found\n", args[2]);
+            const char *val = get_shell_var(args[2]);
+            if (val != NULL)
+                printf("declare -- %s=\"%s\"\n", args[2], val);
+            else
+                printf("declare: %s: not found\n", args[2]);
+        }
+        else if (nargs >= 2)
+        {
+            for (int i = 1; i < nargs; i++)
+            {
+                char *eq = strchr(args[i], '=');
+                if (eq != NULL)
+                {
+                    *eq = '\0';
+                    set_shell_var(args[i], eq + 1);
+                    *eq = '='; // Restore just in case
+                }
+            }
         }
         exit(0);
     }
@@ -1069,7 +1127,24 @@ int main(int argc, char *argv[])
         {
             if (nargs >= 3 && strcmp(args[1], "-p") == 0)
             {
-                printf("declare: %s: not found\n", args[2]);
+                const char *val = get_shell_var(args[2]);
+                if (val != NULL)
+                    printf("declare -- %s=\"%s\"\n", args[2], val);
+                else
+                    printf("declare: %s: not found\n", args[2]);
+            }
+            else if (nargs >= 2)
+            {
+                for (int i = 1; i < nargs; i++)
+                {
+                    char *eq = strchr(args[i], '=');
+                    if (eq != NULL)
+                    {
+                        *eq = '\0';
+                        set_shell_var(args[i], eq + 1);
+                        *eq = '='; // Restore just in case
+                    }
+                }
             }
         }
 
