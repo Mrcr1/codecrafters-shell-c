@@ -697,6 +697,21 @@ int main(int argc, char *argv[])
     setbuf(stdout, NULL);
 
     using_history();
+    
+    // Load history from HISTFILE on startup if available
+    char *histfile = getenv("HISTFILE");
+    if (histfile != NULL)
+    {
+        read_history(histfile);
+        HIST_ENTRY **the_list = history_list();
+        if (the_list)
+        {
+            int total = 0;
+            while (the_list[total] != NULL) total++;
+            history_appended = total;
+        }
+    }
+
     rl_attempted_completion_function = shell_completion;
 
     while (1)
