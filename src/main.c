@@ -134,18 +134,19 @@ int parse_args(char *input, char **args, int max_args)
                     }
                     else if (*p == '$')
                     {
-                        char *start = p + 1;
-                        if ((*start >= 'a' && *start <= 'z') || (*start >= 'A' && *start <= 'Z') || *start == '_')
+                        if (*(p + 1) == '{')
                         {
-                            p++;
+                            p += 2; // Skip ${
                             char varname[256];
                             int vidx = 0;
-                            while (*p != '\0' && ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || *p == '_'))
+                            while (*p != '\0' && *p != '}')
                             {
                                 if (vidx < 255) varname[vidx++] = *p;
                                 p++;
                             }
                             varname[vidx] = '\0';
+                            
+                            if (*p == '}') p++; // Skip }
                             
                             const char *val = get_shell_var(varname);
                             if (val)
@@ -158,8 +159,33 @@ int parse_args(char *input, char **args, int max_args)
                         }
                         else
                         {
-                            if (buf_len < 4095) buf[buf_len++] = *p;
-                            p++;
+                            char *start = p + 1;
+                            if ((*start >= 'a' && *start <= 'z') || (*start >= 'A' && *start <= 'Z') || *start == '_')
+                            {
+                                p++;
+                                char varname[256];
+                                int vidx = 0;
+                                while (*p != '\0' && ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || *p == '_'))
+                                {
+                                    if (vidx < 255) varname[vidx++] = *p;
+                                    p++;
+                                }
+                                varname[vidx] = '\0';
+                                
+                                const char *val = get_shell_var(varname);
+                                if (val)
+                                {
+                                    for (int k = 0; val[k] != '\0'; k++)
+                                    {
+                                        if (buf_len < 4095) buf[buf_len++] = val[k];
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                if (buf_len < 4095) buf[buf_len++] = *p;
+                                p++;
+                            }
                         }
                     }
                     else
@@ -181,18 +207,19 @@ int parse_args(char *input, char **args, int max_args)
             }
             else if (*p == '$')
             {
-                char *start = p + 1;
-                if ((*start >= 'a' && *start <= 'z') || (*start >= 'A' && *start <= 'Z') || *start == '_')
+                if (*(p + 1) == '{')
                 {
-                    p++;
+                    p += 2; // Skip ${
                     char varname[256];
                     int vidx = 0;
-                    while (*p != '\0' && ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || *p == '_'))
+                    while (*p != '\0' && *p != '}')
                     {
                         if (vidx < 255) varname[vidx++] = *p;
                         p++;
                     }
                     varname[vidx] = '\0';
+                    
+                    if (*p == '}') p++; // Skip }
                     
                     const char *val = get_shell_var(varname);
                     if (val)
@@ -205,8 +232,33 @@ int parse_args(char *input, char **args, int max_args)
                 }
                 else
                 {
-                    if (buf_len < 4095) buf[buf_len++] = *p;
-                    p++;
+                    char *start = p + 1;
+                    if ((*start >= 'a' && *start <= 'z') || (*start >= 'A' && *start <= 'Z') || *start == '_')
+                    {
+                        p++;
+                        char varname[256];
+                        int vidx = 0;
+                        while (*p != '\0' && ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || *p == '_'))
+                        {
+                            if (vidx < 255) varname[vidx++] = *p;
+                            p++;
+                        }
+                        varname[vidx] = '\0';
+                        
+                        const char *val = get_shell_var(varname);
+                        if (val)
+                        {
+                            for (int k = 0; val[k] != '\0'; k++)
+                            {
+                                if (buf_len < 4095) buf[buf_len++] = val[k];
+                            }
+                        }
+                    }
+                    else
+                    {
+                        if (buf_len < 4095) buf[buf_len++] = *p;
+                        p++;
+                    }
                 }
             }
             else if (*p == ' ' || *p == '\t')
