@@ -286,7 +286,8 @@ void exec_builtin_in_child(char **args, int nargs)
             if (!strcmp(name, "exit") || !strcmp(name, "echo") ||
                 !strcmp(name, "type") || !strcmp(name, "pwd")  ||
                 !strcmp(name, "cd")   || !strcmp(name, "complete") ||
-                !strcmp(name, "jobs") || !strcmp(name, "history"))
+                !strcmp(name, "jobs") || !strcmp(name, "history") ||
+                !strcmp(name, "declare"))
             {
                 printf("%s is a shell builtin\n", name);
             }
@@ -386,6 +387,11 @@ void exec_builtin_in_child(char **args, int nargs)
         }
         exit(0);
     }
+    else if (strcmp(args[0], "declare") == 0)
+    {
+        // Parameter expansion implementation coming in later stages
+        exit(0);
+    }
 }
 
 int is_builtin(const char *cmd)
@@ -393,7 +399,8 @@ int is_builtin(const char *cmd)
     return (!strcmp(cmd, "echo") || !strcmp(cmd, "type") ||
             !strcmp(cmd, "pwd")  || !strcmp(cmd, "cd")   ||
             !strcmp(cmd, "exit") || !strcmp(cmd, "complete") ||
-            !strcmp(cmd, "jobs") || !strcmp(cmd, "history"));
+            !strcmp(cmd, "jobs") || !strcmp(cmd, "history")  ||
+            !strcmp(cmd, "declare"));
 }
 
 // Execute a multi-stage pipeline
@@ -474,7 +481,7 @@ void run_pipeline(char ***all_args, int *all_nargs, int num_cmds)
 }
 
 // Builtins for TAB completion
-char *builtin_list[] = {"echo", "exit", "type", "pwd", "cd", "complete", "jobs", "history", NULL};
+char *builtin_list[] = {"echo", "exit", "type", "pwd", "cd", "complete", "jobs", "history", "declare", NULL};
 char **matches = NULL;
 int match_count = 0;
 
@@ -1055,6 +1062,11 @@ int main(int argc, char *argv[])
             }
         }
 
+        else if (strcmp(builtin, "declare") == 0)
+        {
+            // Parameter expansion implementation coming in later stages
+        }
+
         else if (strcmp(builtin, "type") == 0)
         {
             if (nargs < 2)
@@ -1067,7 +1079,8 @@ int main(int argc, char *argv[])
                 if (!strcmp(name, "exit") || !strcmp(name, "echo") ||
                     !strcmp(name, "type") || !strcmp(name, "pwd") ||
                     !strcmp(name, "cd")   || !strcmp(name, "complete") ||
-                    !strcmp(name, "jobs") || !strcmp(name, "history"))
+                    !strcmp(name, "jobs") || !strcmp(name, "history") ||
+                    !strcmp(name, "declare"))
                 {
                     printf("%s is a shell builtin\n", name);
                 }
