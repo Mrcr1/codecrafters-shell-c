@@ -35,11 +35,72 @@ char *find_in_path(const char *cmd)
     return NULL;
 }
 
+// Shell variable tracking moved to global top for parse_args
+#define MAX_VARS 256
+
+typedef struct
+{
+    char *name;
+    char *value;
+} ShellVar;
+
+ShellVar shell_vars[MAX_VARS];
+int shell_vars_count = 0;
+
+void set_shell_var(const char *name, const char *value)
+{
+    for (int i = 0; i < shell_vars_count; i++)
+    {
+        if (strcmp(shell_vars[i].name, name) == 0)
+        {
+            free(shell_vars[i].value);
+            shell_vars[i].value = strdup(value);
+            return;
+        }
+    }
+    if (shell_vars_count < MAX_VARS)
+    {
+        shell_vars[shell_vars_count].name = strdup(name);
+        shell_vars[shell_vars_count].value = strdup(value);
+        shell_vars_count++;
+    }
+}
+
+const char *get_shell_var(const char *name)
+{
+    for (int i = 0; i < shell_vars_count; i++)
+    {
+        if (strcmp(shell_vars[i].name, name) == 0)
+            return shell_vars[i].value;
+    }
+    return NULL;
+}
+
+int is_valid_identifier(const char *name)
+{
+    if (name == NULL || *name == '\0') return 0;
+    
+    // First character must be a letter or underscore
+    if (!((*name >= 'a' && *name <= 'z') || (*name >= 'A' && *name <= 'Z') || *name == '_'))
+        return 0;
+        
+    // Subsequent characters can also include digits
+    for (int i = 1; name[i] != '\0'; i++)
+    {
+        if (!((name[i] >= 'a' && name[i] <= 'z') || 
+              (name[i] >= 'A' && name[i] <= 'Z') || 
+              (name[i] >= '0' && name[i] <= '9') || 
+              name[i] == '_'))
+            return 0;
+    }
+    return 1;
+}
+
 int parse_args(char *input, char **args, int max_args)
 {
     int argc = 0;
     char *p = input;
-    char buf[1024];
+    char buf[4096]; // Expanded buffer size for evaluated variables
 
     while (*p != '\0' && argc < max_args - 1)
     {
@@ -54,7 +115,10 @@ int parse_args(char *input, char **args, int max_args)
             {
                 p++;
                 while (*p != '\0' && *p != '\'')
-                    buf[buf_len++] = *p++;
+                {
+                    if (buf_len < 4095) buf[buf_len++] = *p;
+                    p++;
+                }
                 if (*p == '\'') p++;
             }
             else if (*p == '"')
@@ -62,13 +126,47 @@ int parse_args(char *input, char **args, int max_args)
                 p++;
                 while (*p != '\0' && *p != '"')
                 {
-                    if (*p == '\\' && (*(p+1) == '"' || *(p+1) == '\\'))
+                    if (*p == '\\' && (*(p+1) == '"' || *(p+1) == '\\' || *(p+1) == '$'))
                     {
                         p++;
-                        buf[buf_len++] = *p++;
+                        if (buf_len < 4095) buf[buf_len++] = *p;
+                        p++;
+                    }
+                    else if (*p == '$')
+                    {
+                        char *start = p + 1;
+                        if ((*start >= 'a' && *start <= 'z') || (*start >= 'A' && *start <= 'Z') || *start == '_')
+                        {
+                            p++;
+                            char varname[256];
+                            int vidx = 0;
+                            while (*p != '\0' && ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || *p == '_'))
+                            {
+                                if (vidx < 255) varname[vidx++] = *p;
+                                p++;
+                            }
+                            varname[vidx] = '\0';
+                            
+                            const char *val = get_shell_var(varname);
+                            if (val)
+                            {
+                                for (int k = 0; val[k] != '\0'; k++)
+                                {
+                                    if (buf_len < 4095) buf[buf_len++] = val[k];
+                                }
+                            }
+                        }
+                        else
+                        {
+                            if (buf_len < 4095) buf[buf_len++] = *p;
+                            p++;
+                        }
                     }
                     else
-                        buf[buf_len++] = *p++;
+                    {
+                        if (buf_len < 4095) buf[buf_len++] = *p;
+                        p++;
+                    }
                 }
                 if (*p == '"') p++;
             }
@@ -76,7 +174,40 @@ int parse_args(char *input, char **args, int max_args)
             {
                 p++;
                 if (*p != '\0')
-                    buf[buf_len++] = *p++;
+                {
+                    if (buf_len < 4095) buf[buf_len++] = *p;
+                    p++;
+                }
+            }
+            else if (*p == '$')
+            {
+                char *start = p + 1;
+                if ((*start >= 'a' && *start <= 'z') || (*start >= 'A' && *start <= 'Z') || *start == '_')
+                {
+                    p++;
+                    char varname[256];
+                    int vidx = 0;
+                    while (*p != '\0' && ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || *p == '_'))
+                    {
+                        if (vidx < 255) varname[vidx++] = *p;
+                        p++;
+                    }
+                    varname[vidx] = '\0';
+                    
+                    const char *val = get_shell_var(varname);
+                    if (val)
+                    {
+                        for (int k = 0; val[k] != '\0'; k++)
+                        {
+                            if (buf_len < 4095) buf[buf_len++] = val[k];
+                        }
+                    }
+                }
+                else
+                {
+                    if (buf_len < 4095) buf[buf_len++] = *p;
+                    p++;
+                }
             }
             else if (*p == ' ' || *p == '\t')
             {
@@ -84,7 +215,8 @@ int parse_args(char *input, char **args, int max_args)
             }
             else
             {
-                buf[buf_len++] = *p++;
+                if (buf_len < 4095) buf[buf_len++] = *p;
+                p++;
             }
         }
 
@@ -172,66 +304,6 @@ int jobs_count = 0;
 // History state tracking
 static int history_appended = 0;
 
-// Shell variable tracking
-#define MAX_VARS 256
-
-typedef struct
-{
-    char *name;
-    char *value;
-} ShellVar;
-
-ShellVar shell_vars[MAX_VARS];
-int shell_vars_count = 0;
-
-void set_shell_var(const char *name, const char *value)
-{
-    for (int i = 0; i < shell_vars_count; i++)
-    {
-        if (strcmp(shell_vars[i].name, name) == 0)
-        {
-            free(shell_vars[i].value);
-            shell_vars[i].value = strdup(value);
-            return;
-        }
-    }
-    if (shell_vars_count < MAX_VARS)
-    {
-        shell_vars[shell_vars_count].name = strdup(name);
-        shell_vars[shell_vars_count].value = strdup(value);
-        shell_vars_count++;
-    }
-}
-
-const char *get_shell_var(const char *name)
-{
-    for (int i = 0; i < shell_vars_count; i++)
-    {
-        if (strcmp(shell_vars[i].name, name) == 0)
-            return shell_vars[i].value;
-    }
-    return NULL;
-}
-
-int is_valid_identifier(const char *name)
-{
-    if (name == NULL || *name == '\0') return 0;
-    
-    // First character must be a letter or underscore
-    if (!((*name >= 'a' && *name <= 'z') || (*name >= 'A' && *name <= 'Z') || *name == '_'))
-        return 0;
-        
-    // Subsequent characters can also include digits
-    for (int i = 1; name[i] != '\0'; i++)
-    {
-        if (!((name[i] >= 'a' && name[i] <= 'z') || 
-              (name[i] >= 'A' && name[i] <= 'Z') || 
-              (name[i] >= '0' && name[i] <= '9') || 
-              name[i] == '_'))
-            return 0;
-    }
-    return 1;
-}
 
 int next_job_num(void)
 {
@@ -473,12 +545,13 @@ void exec_builtin_in_child(char **args, int nargs)
                     }
                     else
                     {
-                        *eq = '='; // Restore to print correctly
+                        *eq = '='; // Restore to print full arg
                         printf("declare: `%s': not a valid identifier\n", args[i]);
                     }
                 }
                 else
                 {
+                    // Handles 'declare 67' where there is no equals sign but the var name is invalid
                     if (!is_valid_identifier(args[i]))
                     {
                         printf("declare: `%s': not a valid identifier\n", args[i]);
