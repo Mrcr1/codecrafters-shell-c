@@ -1151,5 +1151,10 @@ int main(int argc, char *argv[])
         free_args(args, nargs);
     }
 
+    if (histfile != NULL)
+    {
+        write_history(histfile);
+    }
+
     return 0;
 }
