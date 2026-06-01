@@ -312,6 +312,11 @@ void exec_builtin_in_child(char **args, int nargs)
             if (nargs >= 3)
                 read_history(args[2]);
         }
+        else if (nargs >= 2 && strcmp(args[1], "-w") == 0)
+        {
+            if (nargs >= 3)
+                write_history(args[2]);
+        }
         else
         {
             HIST_ENTRY **the_list = history_list();
@@ -918,6 +923,11 @@ int main(int argc, char *argv[])
             {
                 if (nargs >= 3)
                     read_history(args[2]);
+            }
+            else if (nargs >= 2 && strcmp(args[1], "-w") == 0)
+            {
+                if (nargs >= 3)
+                    write_history(args[2]);
             }
             else
             {
