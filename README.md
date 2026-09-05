@@ -1,3 +1,17 @@
+**The Struggle of Operating in Terminals/Shells in the Beginnings of Using Linux/UNIX.**
+
+Everyone Faces it, I faced it too.
+
+Made Myself a UNIX Terminal from the Below Codecrafters Tutorial.
+
+Understood **Why** the way the Things are.
+Pretty Basic.
+
+The main.c file contains the code for the Terminal.
+
+--------------------
+
+
 [![progress-banner](https://backend.codecrafters.io/progress/shell/f142075b-566d-4ec5-b841-d5c97e14bf4d)](https://app.codecrafters.io/users/codecrafters-bot?r=2qF)
 
 This is a starting point for C solutions to the
